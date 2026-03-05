@@ -350,3 +350,49 @@
 .file-chip {
     max-width: 280px;
 }
+
+/* ── Routed model UI ─────────────────────────────────────────────────────── */
+
+.model-divider {
+    height: 1px;
+    background: var(--border-color, #2a2a3e);
+    margin: 4px 0;
+}
+
+.model-option-routed {
+    color: #a78bfa;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: space-between;
+}
+
+.model-option-routed.selected {
+    background: rgba(167, 139, 250, 0.12);
+}
+
+.routed-tag {
+    font-size: 10px;
+    background: rgba(167, 139, 250, 0.15);
+    color: #a78bfa;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.attribution-footer {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-muted, #6b7280);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+
+.token-count {
+    color: var(--text-muted, #6b7280);
+    opacity: 0.7;
+}

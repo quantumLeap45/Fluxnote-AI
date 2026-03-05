@@ -61,7 +61,7 @@ function ChatView({ sessionId, initialContext, onContextConsumed }) {
         setStreaming(true);
         setError(null);
         const aiMsgId = Date.now() + 1;
-        setMessages(prev => [...prev, { id: aiMsgId, role: 'ai', content: '', model: selectedModel }]);
+        setMessages(prev => [...prev, { id: aiMsgId, role: 'ai', content: '', model: selectedModel, attribution: null }]);
 
         await streamChatMessage({
             message: inputText,
@@ -73,7 +73,14 @@ function ChatView({ sessionId, initialContext, onContextConsumed }) {
                     m.id === aiMsgId ? { ...m, content: m.content + chunk } : m
                 ));
             },
-            onDone: () => setStreaming(false),
+            onDone: (attribution) => {
+                if (attribution) {
+                    setMessages(prev => prev.map(m =>
+                        m.id === aiMsgId ? { ...m, attribution } : m
+                    ));
+                }
+                setStreaming(false);
+            },
             onError: (msg) => {
                 setError(msg);
                 setStreaming(false);
@@ -150,6 +157,17 @@ function ChatView({ sessionId, initialContext, onContextConsumed }) {
                                     {model}
                                 </button>
                             ))}
+                            <div className="model-divider" />
+                            <button
+                                className={`model-option model-option-routed ${selectedModel === 'Routed' ? 'selected' : ''}`}
+                                onClick={() => {
+                                    setSelectedModel('Routed');
+                                    setShowModelDropdown(false);
+                                }}
+                            >
+                                ⚡ Routed
+                                <span className="routed-tag">Multi-AI</span>
+                            </button>
                         </div>
                     )}
                 </div>
@@ -173,7 +191,9 @@ function ChatView({ sessionId, initialContext, onContextConsumed }) {
                             </div>
                             <div className="message-content">
                                 {msg.role === 'ai' && (
-                                    <div className="message-metadata">{msg.model}</div>
+                                    <div className="message-metadata">
+                                        {msg.model === 'Routed' ? '⚡ Routed' : msg.model}
+                                    </div>
                                 )}
                                 <div className="message-text">
                                     {msg.content}
@@ -181,6 +201,14 @@ function ChatView({ sessionId, initialContext, onContextConsumed }) {
                                         <span className="typing-indicator">…</span>
                                     )}
                                 </div>
+                                {msg.attribution && (
+                                    <div className="attribution-footer">
+                                        ⚡ Synthesised from {msg.attribution.models_used.join(' · ')}
+                                        {msg.attribution.total_tokens > 0 && (
+                                            <span className="token-count"> · {msg.attribution.total_tokens.toLocaleString()} tokens</span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}

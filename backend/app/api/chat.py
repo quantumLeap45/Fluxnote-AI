@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 
 from app.models.chat import ChatRequest, ModelTier
 from app.services.ai_router import stream_chat_response
+from app.services.routed_llm import classify_task, gather_model_responses, stream_synthesis, build_attribution
 from app.services.supabase_client import get_supabase
 
 router = APIRouter()
@@ -80,22 +81,53 @@ async def post_message(request: ChatRequest):
         try:
             yield "data: " + json.dumps({"type": "start"}) + "\n\n"
 
-            async for chunk in stream_chat_response(messages, request.model):
-                chunks.append(chunk)
-                yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
+            if request.model == ModelTier.ROUTED:
+                # ── Routed (MoA) path ─────────────────────────────────────
+                # Step 1: classify + call models in parallel
+                task_type    = await classify_task(user_content)
+                model_results = await gather_model_responses(messages, task_type)
 
-            # Persist the complete assistant response
-            full_response = "".join(chunks)
-            supabase.table("chat_messages").insert({
-                "id": str(uuid.uuid4()),
-                "session_id": request.session_id,
-                "role": "assistant",
-                "content": full_response,
-                "model": request.model.value,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }).execute()
+                # Step 2: stream synthesis
+                async for chunk in stream_synthesis(model_results, task_type, messages):
+                    chunks.append(chunk)
+                    yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
-            yield "data: " + json.dumps({"type": "done"}) + "\n\n"
+                attribution = build_attribution(model_results)
+
+                full_response = "".join(chunks)
+                supabase.table("chat_messages").insert({
+                    "id":         str(uuid.uuid4()),
+                    "session_id": request.session_id,
+                    "role":       "assistant",
+                    "content":    full_response,
+                    "model":      request.model.value,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }).execute()
+
+                yield "data: " + json.dumps({
+                    "type":         "done",
+                    "routed":       True,
+                    "models_used":  attribution["models_used"],
+                    "total_tokens": attribution["total_tokens"],
+                }) + "\n\n"
+
+            else:
+                # ── Standard single-model path ────────────────────────────
+                async for chunk in stream_chat_response(messages, request.model):
+                    chunks.append(chunk)
+                    yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
+
+                full_response = "".join(chunks)
+                supabase.table("chat_messages").insert({
+                    "id":         str(uuid.uuid4()),
+                    "session_id": request.session_id,
+                    "role":       "assistant",
+                    "content":    full_response,
+                    "model":      request.model.value,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }).execute()
+
+                yield "data: " + json.dumps({"type": "done"}) + "\n\n"
 
         except Exception as e:
             yield "data: " + json.dumps({"type": "error", "message": str(e)}) + "\n\n"

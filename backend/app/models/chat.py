@@ -5,9 +5,10 @@ from datetime import datetime
 
 
 class ModelTier(str, Enum):
-    FAST = "Fast"
-    BALANCED = "Balanced"
+    FAST       = "Fast"
+    BALANCED   = "Balanced"
     DEEP_THINK = "Deep Think"
+    ROUTED     = "Routed"
 
 
 class ChatRequest(BaseModel):
