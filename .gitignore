@@ -57,3 +57,5 @@ Thumbs.db
 
 # ── Uploads (temp files) ──────────────────────────────────────────────────────
 uploads/
+.vercel
+.env*.local

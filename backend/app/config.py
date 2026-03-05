@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     MODEL_FAST: str = "google/gemini-3.1-flash-lite-preview"
     MODEL_BALANCED: str = "openai/gpt-5-nano"
     MODEL_DEEP_THINK: str = "anthropic/claude-haiku-4.5"
+    MODEL_VISION: str = "anthropic/claude-haiku-4.5"
 
     # Supabase
     SUPABASE_URL: str = ""

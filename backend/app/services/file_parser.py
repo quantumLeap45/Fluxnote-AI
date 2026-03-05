@@ -36,7 +36,37 @@ def _parse_docx(content: bytes) -> Optional[str]:
     try:
         from docx import Document
         doc = Document(io.BytesIO(content))
-        return "\n".join(para.text for para in doc.paragraphs)
+        parts = []
+
+        # Paragraphs (body text)
+        for para in doc.paragraphs:
+            if para.text.strip():
+                parts.append(para.text)
+
+        # Tables — rubrics, marking criteria, structured content
+        for table in doc.tables:
+            for row in table.rows:
+                seen = set()
+                unique_cells = []
+                for cell in row.cells:
+                    if cell._tc not in seen:
+                        seen.add(cell._tc)
+                        unique_cells.append(cell)
+                row_text = " | ".join(
+                    cell.text.strip() for cell in unique_cells if cell.text.strip()
+                )
+                if row_text:
+                    parts.append(row_text)
+
+        # Headers and footers — often contain module code, due date, title
+        for section in doc.sections:
+            for container in (section.header, section.footer):
+                if not container.is_linked_to_previous:
+                    for para in container.paragraphs:
+                        if para.text.strip():
+                            parts.append(para.text)
+
+        return "\n".join(parts) or None
     except Exception:
         return None
 

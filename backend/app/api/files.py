@@ -6,6 +6,7 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from app.config import settings
 from app.models.file import FileUploadResponse
 from app.services.file_parser import ALLOWED_EXTENSIONS, parse_file
+from app.services.image_extractor import extract_image_text
 import app.services.db as db
 
 router = APIRouter()
@@ -49,6 +50,10 @@ async def upload_file(
         )
 
     parsed_text = parse_file(content, file.content_type or "", filename)
+
+    image_text = await extract_image_text(content, filename)
+    if image_text:
+        parsed_text = (parsed_text or "") + "\n\n[Image content]\n" + image_text
 
     file_id = str(uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
