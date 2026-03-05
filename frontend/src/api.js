@@ -38,11 +38,22 @@ export const deleteFile = async (fileId, sessionId) => {
 
 // ── Chat ───────────────────────────────────────────────────────────────────
 export const streamChatMessage = async ({ message, model, fileIds, sessionId, onChunk, onDone, onError }) => {
-    const res = await fetch(`${API_BASE}/api/v1/chat/message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, model, file_ids: fileIds, session_id: sessionId }),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    let res;
+    try {
+        res = await fetch(`${API_BASE}/api/v1/chat/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, model, file_ids: fileIds, session_id: sessionId }),
+            signal: controller.signal,
+        });
+    } catch (err) {
+        clearTimeout(timeoutId);
+        onError(err.name === 'AbortError' ? 'Request timed out — please try again.' : 'Network error — please check your connection.');
+        return;
+    }
+    clearTimeout(timeoutId);
     if (!res.ok) {
         onError((await res.json()).detail || 'Request failed');
         return;

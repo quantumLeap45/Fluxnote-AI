@@ -4,7 +4,7 @@ from app.models.workspace import (
     TaskCreate, TaskUpdate,
     EventCreate, EventUpdate,
 )
-from app.services.supabase_client import get_supabase
+import app.services.db as db
 import uuid
 from datetime import datetime, timezone
 
@@ -18,10 +18,9 @@ def _now_iso() -> str:
 # ── Notes ──────────────────────────────────────────────────────────────────────
 
 @router.get("/notes")
-def get_notes(session_id: str = Query(...)):
-    supabase = get_supabase()
-    result = (
-        supabase.table("notes")
+async def get_notes(session_id: str = Query(...)):
+    result = await (
+        db.table("notes")
         .select("*")
         .eq("session_id", session_id)
         .order("created_at", desc=True)
@@ -31,8 +30,7 @@ def get_notes(session_id: str = Query(...)):
 
 
 @router.post("/notes")
-def create_note(body: NoteCreate, session_id: str = Query(...)):
-    supabase = get_supabase()
+async def create_note(body: NoteCreate, session_id: str = Query(...)):
     now = _now_iso()
     record = {
         "id": str(uuid.uuid4()),
@@ -42,17 +40,16 @@ def create_note(body: NoteCreate, session_id: str = Query(...)):
         "created_at": now,
         "updated_at": now,
     }
-    result = supabase.table("notes").insert(record).execute()
+    result = await db.table("notes").insert(record).execute()
     return result.data[0]
 
 
 @router.put("/notes/{note_id}")
-def update_note(note_id: str, body: NoteUpdate, session_id: str = Query(...)):
-    supabase = get_supabase()
+async def update_note(note_id: str, body: NoteUpdate, session_id: str = Query(...)):
     update_data = body.model_dump(exclude_none=True)
     update_data["updated_at"] = _now_iso()
-    result = (
-        supabase.table("notes")
+    result = await (
+        db.table("notes")
         .update(update_data)
         .eq("id", note_id)
         .eq("session_id", session_id)
@@ -64,19 +61,17 @@ def update_note(note_id: str, body: NoteUpdate, session_id: str = Query(...)):
 
 
 @router.delete("/notes/{note_id}")
-def delete_note(note_id: str, session_id: str = Query(...)):
-    supabase = get_supabase()
-    supabase.table("notes").delete().eq("id", note_id).eq("session_id", session_id).execute()
+async def delete_note(note_id: str, session_id: str = Query(...)):
+    await db.table("notes").delete().eq("id", note_id).eq("session_id", session_id).execute()
     return {"success": True}
 
 
 # ── Tasks ──────────────────────────────────────────────────────────────────────
 
 @router.get("/tasks")
-def get_tasks(session_id: str = Query(...)):
-    supabase = get_supabase()
-    result = (
-        supabase.table("tasks")
+async def get_tasks(session_id: str = Query(...)):
+    result = await (
+        db.table("tasks")
         .select("*")
         .eq("session_id", session_id)
         .order("created_at", desc=True)
@@ -86,8 +81,7 @@ def get_tasks(session_id: str = Query(...)):
 
 
 @router.post("/tasks")
-def create_task(body: TaskCreate, session_id: str = Query(...)):
-    supabase = get_supabase()
+async def create_task(body: TaskCreate, session_id: str = Query(...)):
     now = _now_iso()
     record = {
         "id": str(uuid.uuid4()),
@@ -99,21 +93,20 @@ def create_task(body: TaskCreate, session_id: str = Query(...)):
         "created_at": now,
         "updated_at": now,
     }
-    result = supabase.table("tasks").insert(record).execute()
+    result = await db.table("tasks").insert(record).execute()
     return result.data[0]
 
 
 @router.put("/tasks/{task_id}")
-def update_task(task_id: str, body: TaskUpdate, session_id: str = Query(...)):
-    supabase = get_supabase()
+async def update_task(task_id: str, body: TaskUpdate, session_id: str = Query(...)):
     update_data = body.model_dump(exclude_none=True)
     if "priority" in update_data:
         update_data["priority"] = update_data["priority"].value
     if "due_date" in update_data and update_data["due_date"] is not None:
         update_data["due_date"] = update_data["due_date"].isoformat()
     update_data["updated_at"] = _now_iso()
-    result = (
-        supabase.table("tasks")
+    result = await (
+        db.table("tasks")
         .update(update_data)
         .eq("id", task_id)
         .eq("session_id", session_id)
@@ -125,19 +118,17 @@ def update_task(task_id: str, body: TaskUpdate, session_id: str = Query(...)):
 
 
 @router.delete("/tasks/{task_id}")
-def delete_task(task_id: str, session_id: str = Query(...)):
-    supabase = get_supabase()
-    supabase.table("tasks").delete().eq("id", task_id).eq("session_id", session_id).execute()
+async def delete_task(task_id: str, session_id: str = Query(...)):
+    await db.table("tasks").delete().eq("id", task_id).eq("session_id", session_id).execute()
     return {"success": True}
 
 
 # ── Calendar Events ────────────────────────────────────────────────────────────
 
 @router.get("/events")
-def get_events(session_id: str = Query(...)):
-    supabase = get_supabase()
-    result = (
-        supabase.table("events")
+async def get_events(session_id: str = Query(...)):
+    result = await (
+        db.table("events")
         .select("*")
         .eq("session_id", session_id)
         .order("date", desc=False)
@@ -147,8 +138,7 @@ def get_events(session_id: str = Query(...)):
 
 
 @router.post("/events")
-def create_event(body: EventCreate, session_id: str = Query(...)):
-    supabase = get_supabase()
+async def create_event(body: EventCreate, session_id: str = Query(...)):
     now = _now_iso()
     record = {
         "id": str(uuid.uuid4()),
@@ -160,21 +150,20 @@ def create_event(body: EventCreate, session_id: str = Query(...)):
         "created_at": now,
         "updated_at": now,
     }
-    result = supabase.table("events").insert(record).execute()
+    result = await db.table("events").insert(record).execute()
     return result.data[0]
 
 
 @router.put("/events/{event_id}")
-def update_event(event_id: str, body: EventUpdate, session_id: str = Query(...)):
-    supabase = get_supabase()
+async def update_event(event_id: str, body: EventUpdate, session_id: str = Query(...)):
     update_data = body.model_dump(exclude_none=True)
     if "type" in update_data:
         update_data["type"] = update_data["type"].value
     if "date" in update_data and update_data["date"] is not None:
         update_data["date"] = update_data["date"].isoformat()
     update_data["updated_at"] = _now_iso()
-    result = (
-        supabase.table("events")
+    result = await (
+        db.table("events")
         .update(update_data)
         .eq("id", event_id)
         .eq("session_id", session_id)
@@ -186,7 +175,6 @@ def update_event(event_id: str, body: EventUpdate, session_id: str = Query(...))
 
 
 @router.delete("/events/{event_id}")
-def delete_event(event_id: str, session_id: str = Query(...)):
-    supabase = get_supabase()
-    supabase.table("events").delete().eq("id", event_id).eq("session_id", session_id).execute()
+async def delete_event(event_id: str, session_id: str = Query(...)):
+    await db.table("events").delete().eq("id", event_id).eq("session_id", session_id).execute()
     return {"success": True}

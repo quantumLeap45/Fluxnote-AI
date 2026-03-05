@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from app.models.chat import ChatRequest, ModelTier
 from app.services.ai_router import stream_chat_response
 from app.services.routed_llm import classify_task, gather_model_responses, stream_synthesis, build_attribution
-from app.services.supabase_client import get_supabase
+import app.services.db as db
 
 router = APIRouter()
 
@@ -18,20 +18,12 @@ router = APIRouter()
 
 @router.post("/message")
 async def post_message(request: ChatRequest):
-    """
-    Stream an AI response for the given message.
+    """Stream an AI response via SSE. Fetches history, prepends file context,
+    saves both user and assistant messages, streams the response."""
 
-    - Fetches the last 20 messages from the session as conversation history.
-    - Optionally prepends file context from uploaded files.
-    - Saves the user message before streaming, then saves the assistant
-      response once the stream completes.
-    - Returns a text/event-stream SSE response.
-    """
-    supabase = get_supabase()
-
-    # ── 1. Fetch conversation history ──────────────────────────────────────────
-    history_resp = (
-        supabase.table("chat_messages")
+    # 1. Fetch conversation history
+    history_resp = await (
+        db.table("chat_messages")
         .select("role, content")
         .eq("session_id", request.session_id)
         .order("created_at", desc=False)
@@ -40,11 +32,11 @@ async def post_message(request: ChatRequest):
     )
     history: list[dict] = history_resp.data or []
 
-    # ── 2. Fetch file context (if any file IDs provided) ───────────────────────
+    # 2. Fetch file context
     file_context = ""
     if request.file_ids:
-        files_resp = (
-            supabase.table("files")
+        files_resp = await (
+            db.table("files")
             .select("name, content")
             .in_("id", request.file_ids)
             .execute()
@@ -53,57 +45,55 @@ async def post_message(request: ChatRequest):
             if file.get("content"):
                 file_context += f"\n\n[File: {file['name']}]\n{file['content']}"
 
-    # ── 3. Build messages list for the AI ─────────────────────────────────────
+    # 3. Build messages list
     messages: list[dict] = [
         {"role": row["role"], "content": row["content"]}
         for row in history
     ]
-
-    user_content = request.message
-    if file_context:
-        user_content += file_context
-
+    user_content = request.message + file_context
     messages.append({"role": "user", "content": user_content})
 
-    # ── 4. Persist user message BEFORE streaming ───────────────────────────────
-    supabase.table("chat_messages").insert({
-        "id": str(uuid.uuid4()),
-        "session_id": request.session_id,
-        "role": "user",
-        "content": request.message,  # store original message, without file context
-        "model": None,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
+    # 4. Persist user message before streaming
+    await (
+        db.table("chat_messages")
+        .insert({
+            "id":         str(uuid.uuid4()),
+            "session_id": request.session_id,
+            "role":       "user",
+            "content":    request.message,
+            "model":      None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .execute()
+    )
 
-    # ── 5. Define SSE generator ────────────────────────────────────────────────
+    # 5. SSE generator
     async def event_stream() -> AsyncGenerator[str, None]:
         chunks: list[str] = []
         try:
             yield "data: " + json.dumps({"type": "start"}) + "\n\n"
 
             if request.model == ModelTier.ROUTED:
-                # ── Routed (MoA) path ─────────────────────────────────────
-                # Step 1: classify + call models in parallel
-                task_type    = await classify_task(user_content)
+                task_type     = await classify_task(user_content)
                 model_results = await gather_model_responses(messages, task_type)
 
-                # Step 2: stream synthesis
                 async for chunk in stream_synthesis(model_results, task_type, messages):
                     chunks.append(chunk)
                     yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
                 attribution = build_attribution(model_results)
-
-                full_response = "".join(chunks)
-                supabase.table("chat_messages").insert({
-                    "id":         str(uuid.uuid4()),
-                    "session_id": request.session_id,
-                    "role":       "assistant",
-                    "content":    full_response,
-                    "model":      request.model.value,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }).execute()
-
+                await (
+                    db.table("chat_messages")
+                    .insert({
+                        "id":         str(uuid.uuid4()),
+                        "session_id": request.session_id,
+                        "role":       "assistant",
+                        "content":    "".join(chunks),
+                        "model":      request.model.value,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                    .execute()
+                )
                 yield "data: " + json.dumps({
                     "type":         "done",
                     "routed":       True,
@@ -112,21 +102,22 @@ async def post_message(request: ChatRequest):
                 }) + "\n\n"
 
             else:
-                # ── Standard single-model path ────────────────────────────
                 async for chunk in stream_chat_response(messages, request.model):
                     chunks.append(chunk)
                     yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
-                full_response = "".join(chunks)
-                supabase.table("chat_messages").insert({
-                    "id":         str(uuid.uuid4()),
-                    "session_id": request.session_id,
-                    "role":       "assistant",
-                    "content":    full_response,
-                    "model":      request.model.value,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }).execute()
-
+                await (
+                    db.table("chat_messages")
+                    .insert({
+                        "id":         str(uuid.uuid4()),
+                        "session_id": request.session_id,
+                        "role":       "assistant",
+                        "content":    "".join(chunks),
+                        "model":      request.model.value,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                    .execute()
+                )
                 yield "data: " + json.dumps({"type": "done"}) + "\n\n"
 
         except Exception as e:
@@ -146,17 +137,13 @@ async def post_message(request: ChatRequest):
 
 @router.get("/history")
 async def get_history(session_id: str = Query(...)):
-    """Return all chat messages for a session, ordered oldest-first."""
-    supabase = get_supabase()
-
-    resp = (
-        supabase.table("chat_messages")
+    resp = await (
+        db.table("chat_messages")
         .select("*")
         .eq("session_id", session_id)
         .order("created_at", desc=False)
         .execute()
     )
-
     return {"messages": resp.data or []}
 
 
@@ -164,9 +151,5 @@ async def get_history(session_id: str = Query(...)):
 
 @router.delete("/history")
 async def delete_history(session_id: str = Query(...)):
-    """Delete all chat messages for a session."""
-    supabase = get_supabase()
-
-    supabase.table("chat_messages").delete().eq("session_id", session_id).execute()
-
+    await db.table("chat_messages").delete().eq("session_id", session_id).execute()
     return {"success": True, "message": "Chat history cleared"}
