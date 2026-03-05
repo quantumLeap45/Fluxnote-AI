@@ -35,6 +35,7 @@ class Assignment(BaseModel):
     file_id:          Optional[str]
     filename:         str
     processing_state: ProcessingState
+    kanban_column:    Optional[str]       = None
     error_message:    Optional[str]       = None
     title:            Optional[str]       = None
     module:           Optional[str]       = None
