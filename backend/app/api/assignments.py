@@ -38,6 +38,7 @@ async def create_assignment(body: AssignmentCreate):
             "file_id":          body.file_id,
             "filename":         file_record["name"],
             "processing_state": ProcessingState.PROCESSING.value,
+            "kanban_column":    "todo",
             "created_at":       now,
             "updated_at":       now,
         })

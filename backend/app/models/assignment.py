@@ -26,6 +26,7 @@ class AssignmentUpdate(BaseModel):
     assignment_type:  Optional[str]             = None
     deliverable_type: Optional[str]             = None
     processing_state: Optional[ProcessingState] = None
+    kanban_column:    Optional[str]             = None
 
 
 class Assignment(BaseModel):
