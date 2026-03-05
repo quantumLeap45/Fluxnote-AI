@@ -14,7 +14,8 @@ class ProcessingState(str, Enum):
 
 
 class AssignmentCreate(BaseModel):
-    file_id: str
+    file_id:   Optional[str]       = None  # legacy single-file (kept for backward compat)
+    file_ids:  Optional[List[str]] = None  # multi-file (v0.5+)
     session_id: str
 
 
@@ -33,6 +34,7 @@ class Assignment(BaseModel):
     id:               str
     session_id:       str
     file_id:          Optional[str]
+    file_ids:         Optional[List[str]] = None
     filename:         str
     processing_state: ProcessingState
     kanban_column:    Optional[str]       = None

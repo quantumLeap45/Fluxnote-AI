@@ -207,6 +207,12 @@
     font-family: monospace;
 }
 
+.source-file-extra {
+    font-size: 11px;
+    color: #a78bfa;
+    margin: 2px 0 0;
+}
+
 /* ── Ask AI Button ───────────────────────────────────────────────────────── */
 
 .ask-ai-btn {

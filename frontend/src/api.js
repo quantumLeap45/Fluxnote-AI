@@ -53,6 +53,45 @@ export const renameChatTitle = (id, newTitle) => {
     localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
 };
 
+// ── Supabase Storage — direct browser upload (bypasses Vercel 4.5MB limit) ──
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const uploadToStorage = async (file, sessionId) => {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase storage is not configured (missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).');
+    }
+    const MAX_BYTES = 20 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+        throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 20 MB.`);
+    }
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${sessionId}/${Date.now()}-${safeName}`;
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/uploads/${path}?upsert=true`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': file.type || 'application/octet-stream',
+        },
+        body: file,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Storage upload failed (${res.status})`);
+    }
+    return { path, name: file.name };
+};
+
+export const processStorageFile = async (storagePath, filename, sessionId) => {
+    const res = await fetch(`${API_BASE}/api/v1/files/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storage_path: storagePath, filename, session_id: sessionId }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'File processing failed');
+    return res.json();
+};
+
 // ── Files ──────────────────────────────────────────────────────────────────
 export const uploadFile = async (file, sessionId) => {
     const MAX_BYTES = 4 * 1024 * 1024;
@@ -177,3 +216,13 @@ export const deleteAssignment = async (assignmentId, sessionId) => {
 
 export const retryAssignment = (assignmentId, sessionId) =>
     updateAssignment(assignmentId, { processing_state: 'queued' }, sessionId);
+
+export const createAssignmentMulti = async (fileIds, sessionId) => {
+    const res = await fetch(`${API_BASE}/api/v1/assignments/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_ids: fileIds, session_id: sessionId }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed to create card');
+    return res.json();
+};

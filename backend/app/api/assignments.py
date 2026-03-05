@@ -15,18 +15,36 @@ router = APIRouter()
 
 @router.post("/", status_code=200)
 async def create_assignment(body: AssignmentCreate):
-    """Create an assignment card and process it synchronously via AI extraction."""
+    """Create an assignment card and process it synchronously via AI extraction.
+
+    Accepts either a single file_id (legacy) or a file_ids list (v0.5 multi-file).
+    """
+    # Resolve which files to use
+    ids_to_fetch = body.file_ids if body.file_ids else ([body.file_id] if body.file_id else [])
+    if not ids_to_fetch:
+        raise HTTPException(status_code=400, detail="file_id or file_ids is required")
+
     file_resp = await (
         db.table("files")
-        .select("name, content")
-        .eq("id", body.file_id)
+        .select("id, name, content")
+        .in_("id", ids_to_fetch)
         .eq("session_id", body.session_id)
         .execute()
     )
     if not file_resp.data:
         raise HTTPException(status_code=404, detail="File not found in this session")
 
-    file_record = file_resp.data[0]
+    # Combine content — 8000-char budget split evenly across files
+    char_budget = 8000
+    per_file = char_budget // len(file_resp.data)
+    combined_content = "\n\n---\n\n".join(
+        f"[File: {f['name']}]\n{(f.get('content') or '')[:per_file]}"
+        for f in file_resp.data
+    )
+
+    primary = file_resp.data[0]
+    all_file_ids = [f["id"] for f in file_resp.data]
+
     now = datetime.now(timezone.utc).isoformat()
     assignment_id = str(uuid.uuid4())
 
@@ -35,8 +53,9 @@ async def create_assignment(body: AssignmentCreate):
         .insert({
             "id":               assignment_id,
             "session_id":       body.session_id,
-            "file_id":          body.file_id,
-            "filename":         file_record["name"],
+            "file_id":          primary["id"],
+            "file_ids":         all_file_ids,
+            "filename":         primary["name"],
             "processing_state": ProcessingState.PROCESSING.value,
             "kanban_column":    "todo",
             "created_at":       now,
@@ -46,7 +65,7 @@ async def create_assignment(body: AssignmentCreate):
     )
 
     try:
-        extracted = await extract_assignment_data(file_record.get("content") or "")
+        extracted = await extract_assignment_data(combined_content)
 
         await (
             db.table("assignments")

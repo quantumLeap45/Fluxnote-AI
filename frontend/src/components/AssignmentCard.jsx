@@ -85,6 +85,9 @@ function AssignmentCard({ assignment: initial, sessionId, onClick, onDelete }) {
                     <div className="card-header-row">
                         <span className="state-badge ready">Ready</span>
                         {card.due_date && <span className="due-date">Due {card.due_date}</span>}
+                        {card.file_ids?.length > 1 && (
+                            <span className="multi-file-badge">+{card.file_ids.length - 1} files</span>
+                        )}
                     </div>
                     <h3 className="card-title">{card.title || card.filename}</h3>
                     {card.module && <p className="card-module">{card.module}</p>}

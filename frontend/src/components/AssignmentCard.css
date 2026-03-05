@@ -186,6 +186,16 @@
     font-weight: 500;
 }
 
+.multi-file-badge {
+    font-size: 10px;
+    font-weight: 500;
+    background: rgba(167, 139, 250, 0.15);
+    color: #a78bfa;
+    padding: 2px 7px;
+    border-radius: 10px;
+    margin-left: auto;
+}
+
 /* ── Failed state ───────────────────────────────────────────────────────────── */
 
 .card-failed {

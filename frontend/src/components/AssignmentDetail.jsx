@@ -66,10 +66,15 @@ function AssignmentDetail({ assignment: initial, sessionId, onClose, onAskAI }) 
                     </section>
                 )}
 
-                {/* Source file */}
+                {/* Source file(s) */}
                 <section className="detail-section">
-                    <h4>Source File</h4>
+                    <h4>Source {card.file_ids?.length > 1 ? 'Files' : 'File'}</h4>
                     <p className="source-file">{card.filename}</p>
+                    {card.file_ids?.length > 1 && (
+                        <p className="source-file-extra">
+                            +{card.file_ids.length - 1} additional file{card.file_ids.length > 2 ? 's' : ''} included
+                        </p>
+                    )}
                 </section>
 
                 {/* Ask AI */}

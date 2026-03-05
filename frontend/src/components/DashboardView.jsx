@@ -1,16 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Upload } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
 import KanbanBoard from './KanbanBoard';
 import AssignmentDetail from './AssignmentDetail';
-import { listAssignments, uploadFile, createAssignment, deleteAssignment } from '../api';
+import { listAssignments, deleteAssignment } from '../api';
 import './DashboardView.css';
 
 function DashboardView({ sessionId, onAskAI }) {
     const [assignments, setAssignments] = useState([]);
     const [selectedCard, setSelectedCard] = useState(null);
-    const [uploading, setUploading] = useState(false);
     const [error, setError] = useState(null);
-    const fileInputRef = useRef();
 
     useEffect(() => {
         listAssignments(sessionId)
@@ -18,21 +15,8 @@ function DashboardView({ sessionId, onAskAI }) {
             .catch(() => {});
     }, [sessionId]);
 
-    const handleUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        setUploading(true);
-        setError(null);
-        try {
-            const uploaded = await uploadFile(file, sessionId);
-            const card = await createAssignment(uploaded.id, sessionId);
-            setAssignments(prev => [{ ...card, kanban_column: 'todo' }, ...prev]);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setUploading(false);
-            e.target.value = '';
-        }
+    const handleCardCreated = (card) => {
+        setAssignments(prev => [card, ...prev]);
     };
 
     const handleAssignmentUpdate = (updated) => {
@@ -54,21 +38,6 @@ function DashboardView({ sessionId, onAskAI }) {
                     <h2 className="dashboard-title">Assignment Dashboard</h2>
                     <p className="dashboard-subtitle">Drag cards across columns to track your progress.</p>
                 </div>
-                <button
-                    className="upload-assignment-btn"
-                    onClick={() => fileInputRef.current.click()}
-                    disabled={uploading}
-                >
-                    {uploading ? <span className="spinner" /> : <Upload size={16} />}
-                    {uploading ? 'Processing…' : 'Upload Assignment'}
-                </button>
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".pdf,.docx,.txt,.csv,.pptx"
-                    style={{ display: 'none' }}
-                    onChange={handleUpload}
-                />
             </header>
 
             {error && (
@@ -84,6 +53,7 @@ function DashboardView({ sessionId, onAskAI }) {
                 onCardClick={setSelectedCard}
                 onAssignmentUpdate={handleAssignmentUpdate}
                 onDeleteCard={handleDeleteCard}
+                onCardCreated={handleCardCreated}
             />
 
             {selectedCard && (
