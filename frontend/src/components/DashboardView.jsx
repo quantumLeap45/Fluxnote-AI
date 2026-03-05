@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, Plus } from 'lucide-react';
-import AssignmentCard from './AssignmentCard';
+import { Upload } from 'lucide-react';
+import KanbanBoard from './KanbanBoard';
 import AssignmentDetail from './AssignmentDetail';
-import { listAssignments, uploadFile, createAssignment } from '../api';
+import { listAssignments, uploadFile, createAssignment, deleteAssignment } from '../api';
 import './DashboardView.css';
 
 function DashboardView({ sessionId, onAskAI }) {
-    const [assignments, setAssignments]   = useState([]);
+    const [assignments, setAssignments] = useState([]);
     const [selectedCard, setSelectedCard] = useState(null);
-    const [uploading, setUploading]       = useState(false);
-    const [error, setError]               = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState(null);
     const fileInputRef = useRef();
 
     useEffect(() => {
@@ -26,7 +26,7 @@ function DashboardView({ sessionId, onAskAI }) {
         try {
             const uploaded = await uploadFile(file, sessionId);
             const card = await createAssignment(uploaded.id, sessionId);
-            setAssignments(prev => [card, ...prev]);
+            setAssignments(prev => [{ ...card, kanban_column: 'todo' }, ...prev]);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -35,12 +35,30 @@ function DashboardView({ sessionId, onAskAI }) {
         }
     };
 
+    const handleAssignmentUpdate = (updated) => {
+        setAssignments(prev => prev.map(a => a.id === updated.id ? updated : a));
+    };
+
+    const handleDeleteCard = async (cardId) => {
+        try {
+            await deleteAssignment(cardId, sessionId);
+            setAssignments(prev => prev.filter(a => a.id !== cardId));
+            if (selectedCard?.id === cardId) setSelectedCard(null);
+        } catch { /* silent */ }
+    };
+
+    const hasAssignments = assignments.length > 0;
+
     return (
         <div className="dashboard-container animate-fade-in">
             <header className="dashboard-header">
                 <div>
                     <h2 className="dashboard-title">Assignment Dashboard</h2>
-                    <p className="dashboard-subtitle">Upload an assignment to get an AI-powered breakdown.</p>
+                    <p className="dashboard-subtitle">
+                        {hasAssignments
+                            ? 'Drag cards across columns to track your progress.'
+                            : 'Upload an assignment to get an AI-powered breakdown.'}
+                    </p>
                 </div>
                 <button
                     className="upload-assignment-btn"
@@ -66,23 +84,20 @@ function DashboardView({ sessionId, onAskAI }) {
                 </div>
             )}
 
-            {assignments.length === 0 && !uploading && (
+            {!hasAssignments && !uploading && (
                 <div className="empty-state">
-                    <Plus size={40} />
-                    <p>No assignments yet. Upload a file to get started.</p>
+                    <p>No assignments yet — upload a file to get started.</p>
                 </div>
             )}
 
-            <div className="dashboard-grid">
-                {assignments.map(card => (
-                    <AssignmentCard
-                        key={card.id}
-                        assignment={card}
-                        sessionId={sessionId}
-                        onClick={setSelectedCard}
-                    />
-                ))}
-            </div>
+            {hasAssignments && (
+                <KanbanBoard
+                    assignments={assignments}
+                    sessionId={sessionId}
+                    onCardClick={setSelectedCard}
+                    onAssignmentUpdate={handleAssignmentUpdate}
+                />
+            )}
 
             {selectedCard && (
                 <AssignmentDetail
