@@ -9,6 +9,36 @@
     transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
     display: flex;
     flex-direction: column;
+    position: relative;
+}
+
+/* Delete button — hover-reveal */
+.card-delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #9ca3af);
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.assignment-card:hover .card-delete-btn {
+    opacity: 1;
+}
+
+.card-delete-btn:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
 }
 
 /* Ready cards are clickable */

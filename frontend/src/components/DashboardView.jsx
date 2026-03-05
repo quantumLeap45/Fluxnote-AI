@@ -47,18 +47,12 @@ function DashboardView({ sessionId, onAskAI }) {
         } catch { /* silent */ }
     };
 
-    const hasAssignments = assignments.length > 0;
-
     return (
         <div className="dashboard-container animate-fade-in">
             <header className="dashboard-header">
                 <div>
                     <h2 className="dashboard-title">Assignment Dashboard</h2>
-                    <p className="dashboard-subtitle">
-                        {hasAssignments
-                            ? 'Drag cards across columns to track your progress.'
-                            : 'Upload an assignment to get an AI-powered breakdown.'}
-                    </p>
+                    <p className="dashboard-subtitle">Drag cards across columns to track your progress.</p>
                 </div>
                 <button
                     className="upload-assignment-btn"
@@ -84,20 +78,13 @@ function DashboardView({ sessionId, onAskAI }) {
                 </div>
             )}
 
-            {!hasAssignments && !uploading && (
-                <div className="empty-state">
-                    <p>No assignments yet — upload a file to get started.</p>
-                </div>
-            )}
-
-            {hasAssignments && (
-                <KanbanBoard
-                    assignments={assignments}
-                    sessionId={sessionId}
-                    onCardClick={setSelectedCard}
-                    onAssignmentUpdate={handleAssignmentUpdate}
-                />
-            )}
+            <KanbanBoard
+                assignments={assignments}
+                sessionId={sessionId}
+                onCardClick={setSelectedCard}
+                onAssignmentUpdate={handleAssignmentUpdate}
+                onDeleteCard={handleDeleteCard}
+            />
 
             {selectedCard && (
                 <AssignmentDetail

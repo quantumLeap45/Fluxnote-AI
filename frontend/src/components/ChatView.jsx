@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { Bot, User, Paperclip, Send, ChevronDown, FileText, X } from 'lucide-react';
 import {
     uploadFile,
@@ -199,10 +200,11 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
                                     </div>
                                 )}
                                 <div className="message-text">
-                                    {msg.content}
-                                    {streaming && msg.role === 'ai' && msg.content === '' && (
-                                        <span className="typing-indicator">…</span>
-                                    )}
+                                    {msg.role === 'ai' ? (
+                                        msg.content === '' && streaming
+                                            ? <span className="typing-indicator">…</span>
+                                            : <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                    ) : msg.content}
                                 </div>
                                 {msg.attribution && (
                                     <div className="attribution-footer">
