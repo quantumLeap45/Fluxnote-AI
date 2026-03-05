@@ -55,6 +55,10 @@ export const renameChatTitle = (id, newTitle) => {
 
 // ── Files ──────────────────────────────────────────────────────────────────
 export const uploadFile = async (file, sessionId) => {
+    const MAX_BYTES = 4 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+        throw new Error(`File is too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is 4 MB.`);
+    }
     const form = new FormData();
     form.append('file', file);
     const res = await fetch(`${API_BASE}/api/v1/files/upload?session_id=${sessionId}`, {
