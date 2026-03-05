@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import datetime, timezone
 
@@ -67,6 +68,19 @@ async def create_assignment(body: AssignmentCreate):
 
         row = await db.table("assignments").select("*").eq("id", assignment_id).execute()
         return row.data[0]
+
+    except asyncio.TimeoutError:
+        await (
+            db.table("assignments")
+            .update({
+                "processing_state": ProcessingState.FAILED.value,
+                "error_message":    "Extraction timed out — please retry",
+                "updated_at":       datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", assignment_id)
+            .execute()
+        )
+        raise HTTPException(status_code=504, detail="AI extraction timed out — please retry")
 
     except Exception as exc:
         await (
