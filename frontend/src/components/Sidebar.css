@@ -1,0 +1,110 @@
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    padding: 16px 12px;
+    height: 100%;
+}
+
+.sidebar-header {
+    margin-bottom: 24px;
+    padding: 0 8px;
+}
+
+.logo {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+}
+
+.new-chat-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background-color: var(--bg-app);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+}
+
+.new-chat-btn:hover {
+    background-color: var(--bg-input-hover);
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 32px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+}
+
+.nav-item:hover {
+    background-color: var(--bg-input-hover);
+    color: var(--text-primary);
+}
+
+.nav-item.active {
+    background-color: var(--bg-input);
+    color: var(--text-primary);
+}
+
+.sidebar-section {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    padding: 0 12px;
+    margin-bottom: 8px;
+}
+
+.file-list-preview {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.file-item-preview {
+    padding: 6px 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-item-preview:hover {
+    background-color: var(--bg-input-hover);
+    color: var(--text-primary);
+}
+
+.sidebar-footer {
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}

@@ -1,0 +1,138 @@
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+
+from app.models.assignment import AssignmentCreate, AssignmentUpdate, ProcessingState
+from app.services.assignment_extractor import extract_assignment_data
+from app.services.supabase_client import get_supabase
+
+router = APIRouter()
+
+
+# ── Background processor ────────────────────────────────────────────────────
+
+async def _process_assignment(assignment_id: str, file_text: str) -> None:
+    """Async background task: extract assignment data and update the record."""
+    db = get_supabase()
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        db.table("assignments").update({
+            "processing_state": ProcessingState.PROCESSING.value,
+            "updated_at": now,
+        }).eq("id", assignment_id).execute()
+
+        extracted = await extract_assignment_data(file_text)
+
+        db.table("assignments").update({
+            "processing_state": ProcessingState.READY.value,
+            "title":            extracted.get("title"),
+            "module":           extracted.get("module"),
+            "due_date":         extracted.get("due_date"),
+            "weightage":        extracted.get("weightage"),
+            "assignment_type":  extracted.get("assignment_type"),
+            "deliverable_type": extracted.get("deliverable_type"),
+            "summary":          extracted.get("summary", []),
+            "checklist":        extracted.get("checklist", []),
+            "constraints":      extracted.get("constraints"),
+            "updated_at":       datetime.now(timezone.utc).isoformat(),
+        }).eq("id", assignment_id).execute()
+
+    except Exception as exc:
+        db.table("assignments").update({
+            "processing_state": ProcessingState.FAILED.value,
+            "error_message":    str(exc)[:500],
+            "updated_at":       datetime.now(timezone.utc).isoformat(),
+        }).eq("id", assignment_id).execute()
+
+
+# ── Routes ──────────────────────────────────────────────────────────────────
+
+@router.post("/", status_code=202)
+async def create_assignment(body: AssignmentCreate, background_tasks: BackgroundTasks):
+    """Create an assignment card from an uploaded file and queue AI processing."""
+    db = get_supabase()
+
+    file_resp = (
+        db.table("files")
+        .select("name, content")
+        .eq("id", body.file_id)
+        .eq("session_id", body.session_id)
+        .execute()
+    )
+    if not file_resp.data:
+        raise HTTPException(status_code=404, detail="File not found in this session")
+
+    file_record = file_resp.data[0]
+    now = datetime.now(timezone.utc).isoformat()
+    assignment_id = str(uuid.uuid4())
+
+    db.table("assignments").insert({
+        "id":               assignment_id,
+        "session_id":       body.session_id,
+        "file_id":          body.file_id,
+        "filename":         file_record["name"],
+        "processing_state": ProcessingState.QUEUED.value,
+        "created_at":       now,
+        "updated_at":       now,
+    }).execute()
+
+    background_tasks.add_task(_process_assignment, assignment_id, file_record.get("content") or "")
+
+    return {"id": assignment_id, "processing_state": "queued", "created_at": now}
+
+
+@router.get("/")
+def list_assignments(session_id: str = Query(...)):
+    db = get_supabase()
+    resp = (
+        db.table("assignments")
+        .select("*")
+        .eq("session_id", session_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return {"assignments": resp.data or []}
+
+
+@router.get("/{assignment_id}")
+def get_assignment(assignment_id: str, session_id: str = Query(...)):
+    db = get_supabase()
+    resp = (
+        db.table("assignments")
+        .select("*")
+        .eq("id", assignment_id)
+        .eq("session_id", session_id)
+        .execute()
+    )
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return resp.data[0]
+
+
+@router.patch("/{assignment_id}")
+def update_assignment(assignment_id: str, body: AssignmentUpdate, session_id: str = Query(...)):
+    db = get_supabase()
+    update_data = body.model_dump(exclude_none=True)
+    if "due_date" in update_data and update_data["due_date"]:
+        update_data["due_date"] = update_data["due_date"].isoformat()
+    if "processing_state" in update_data:
+        update_data["processing_state"] = update_data["processing_state"].value
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    resp = (
+        db.table("assignments")
+        .update(update_data)
+        .eq("id", assignment_id)
+        .eq("session_id", session_id)
+        .execute()
+    )
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return resp.data[0]
+
+
+@router.delete("/{assignment_id}")
+def delete_assignment(assignment_id: str, session_id: str = Query(...)):
+    db = get_supabase()
+    db.table("assignments").delete().eq("id", assignment_id).eq("session_id", session_id).execute()
+    return {"success": True}
