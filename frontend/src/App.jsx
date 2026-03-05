@@ -9,6 +9,7 @@ import {
     getStoredChats,
     storeChatTitle,
     removeStoredChat,
+    renameChatTitle,
 } from './api';
 
 function App() {
@@ -51,6 +52,11 @@ function App() {
         refreshChats();
     }, [refreshChats]);
 
+    const handleRenameChat = useCallback((id, newTitle) => {
+        renameChatTitle(id, newTitle);
+        refreshChats();
+    }, [refreshChats]);
+
     const openChatWithContext = useCallback((assignment) => {
         setChatContext(assignment);
         setActiveTab('chat');
@@ -66,6 +72,7 @@ function App() {
                 onNewChat={handleNewChat}
                 onSelectChat={handleSelectChat}
                 onDeleteChat={handleDeleteChat}
+                onRenameChat={handleRenameChat}
             />
             <main className="main-content">
                 {activeTab === 'chat' && (

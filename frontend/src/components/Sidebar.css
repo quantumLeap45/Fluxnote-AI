@@ -144,3 +144,52 @@
     color: var(--text-primary);
     background-color: var(--bg-input);
 }
+
+.sidebar-empty {
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 8px 12px;
+    font-style: italic;
+}
+
+.rename-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    padding: 2px 0;
+}
+
+.rename-input {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-input);
+    border: 1px solid var(--accent-color);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+    outline: none;
+    min-width: 0;
+}
+
+.chat-history-action {
+    flex-shrink: 0;
+    opacity: 0;
+    padding: 3px;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+}
+
+.chat-history-item:hover .chat-history-action {
+    opacity: 1;
+}
+
+.chat-history-action:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-input);
+}

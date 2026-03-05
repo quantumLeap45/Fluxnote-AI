@@ -45,6 +45,14 @@ export const removeStoredChat = (id) => {
     localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
 };
 
+export const renameChatTitle = (id, newTitle) => {
+    const chats = getStoredChats();
+    const idx = chats.findIndex(c => c.id === id);
+    if (idx < 0) return;
+    chats[idx] = { ...chats[idx], title: newTitle.trim().slice(0, 55) };
+    localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+};
+
 // ── Files ──────────────────────────────────────────────────────────────────
 export const uploadFile = async (file, sessionId) => {
     const form = new FormData();
