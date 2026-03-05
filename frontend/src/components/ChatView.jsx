@@ -15,7 +15,7 @@ const MODEL_MAP = {
     'Deep Think': 'Deep Think',
 };
 
-function ChatView({ sessionId, initialContext, onContextConsumed }) {
+function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage }) {
     const [selectedModel, setSelectedModel] = useState('Fast');
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [inputText, setInputText] = useState('');
@@ -57,14 +57,17 @@ function ChatView({ sessionId, initialContext, onContextConsumed }) {
         if (!inputText.trim() || streaming) return;
         const userMsg = { id: Date.now(), role: 'user', content: inputText };
         setMessages(prev => [...prev, userMsg]);
+        const sentText = inputText;
         setInputText('');
         setStreaming(true);
         setError(null);
+        // Save chat title from first user message
+        onFirstMessage?.(sessionId, sentText);
         const aiMsgId = Date.now() + 1;
         setMessages(prev => [...prev, { id: aiMsgId, role: 'ai', content: '', model: selectedModel, attribution: null }]);
 
         await streamChatMessage({
-            message: inputText,
+            message: sentText,
             model: selectedModel,
             fileIds: files.map(f => f.id),
             sessionId,
@@ -278,9 +281,7 @@ function ChatView({ sessionId, initialContext, onContextConsumed }) {
                         <Send size={16} />
                     </button>
                 </div>
-                <div className="disclaimer">
-                    Fluxnote AI MVP v0.2. Founder validation build.
-                </div>
+
             </div>
         </div>
     );

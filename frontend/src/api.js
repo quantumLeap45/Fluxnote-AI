@@ -1,15 +1,48 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-// ── Session ────────────────────────────────────────────────────────────────
-const SESSION_KEY = 'fluxnote_session_id';
+// ── Session & Chat History ──────────────────────────────────────────────────
+const ACTIVE_CHAT_KEY = 'fluxnote_active_chat';
+const CHATS_KEY       = 'fluxnote_chats';
 
 export const getSessionId = () => {
-    let id = localStorage.getItem(SESSION_KEY);
+    // Migrate from old key if needed
+    let id = localStorage.getItem(ACTIVE_CHAT_KEY)
+          || localStorage.getItem('fluxnote_session_id');
     if (!id) {
         id = crypto.randomUUID();
-        localStorage.setItem(SESSION_KEY, id);
+        localStorage.setItem(ACTIVE_CHAT_KEY, id);
+    } else {
+        localStorage.setItem(ACTIVE_CHAT_KEY, id);
     }
     return id;
+};
+
+export const createNewChatSession = () => {
+    const id = crypto.randomUUID();
+    localStorage.setItem(ACTIVE_CHAT_KEY, id);
+    return id;
+};
+
+export const switchChatSession = (id) => {
+    localStorage.setItem(ACTIVE_CHAT_KEY, id);
+};
+
+export const getStoredChats = () => {
+    try { return JSON.parse(localStorage.getItem(CHATS_KEY) || '[]'); }
+    catch { return []; }
+};
+
+export const storeChatTitle = (id, firstMessage) => {
+    const chats = getStoredChats();
+    const idx = chats.findIndex(c => c.id === id);
+    if (idx >= 0) return; // title already set — don't overwrite
+    chats.unshift({ id, title: firstMessage.slice(0, 55), created_at: new Date().toISOString() });
+    localStorage.setItem(CHATS_KEY, JSON.stringify(chats.slice(0, 40)));
+};
+
+export const removeStoredChat = (id) => {
+    const chats = getStoredChats().filter(c => c.id !== id);
+    localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
 };
 
 // ── Files ──────────────────────────────────────────────────────────────────
