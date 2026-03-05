@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.models.assignment import AssignmentCreate, AssignmentUpdate, ProcessingState
 from app.services.assignment_extractor import extract_assignment_data
@@ -10,47 +10,11 @@ from app.services.supabase_client import get_supabase
 router = APIRouter()
 
 
-# ── Background processor ────────────────────────────────────────────────────
-
-async def _process_assignment(assignment_id: str, file_text: str) -> None:
-    """Async background task: extract assignment data and update the record."""
-    db = get_supabase()
-    now = datetime.now(timezone.utc).isoformat()
-    try:
-        db.table("assignments").update({
-            "processing_state": ProcessingState.PROCESSING.value,
-            "updated_at": now,
-        }).eq("id", assignment_id).execute()
-
-        extracted = await extract_assignment_data(file_text)
-
-        db.table("assignments").update({
-            "processing_state": ProcessingState.READY.value,
-            "title":            extracted.get("title"),
-            "module":           extracted.get("module"),
-            "due_date":         extracted.get("due_date"),
-            "weightage":        extracted.get("weightage"),
-            "assignment_type":  extracted.get("assignment_type"),
-            "deliverable_type": extracted.get("deliverable_type"),
-            "summary":          extracted.get("summary", []),
-            "checklist":        extracted.get("checklist", []),
-            "constraints":      extracted.get("constraints"),
-            "updated_at":       datetime.now(timezone.utc).isoformat(),
-        }).eq("id", assignment_id).execute()
-
-    except Exception as exc:
-        db.table("assignments").update({
-            "processing_state": ProcessingState.FAILED.value,
-            "error_message":    str(exc)[:500],
-            "updated_at":       datetime.now(timezone.utc).isoformat(),
-        }).eq("id", assignment_id).execute()
-
-
 # ── Routes ──────────────────────────────────────────────────────────────────
 
-@router.post("/", status_code=202)
-async def create_assignment(body: AssignmentCreate, background_tasks: BackgroundTasks):
-    """Create an assignment card from an uploaded file and queue AI processing."""
+@router.post("/", status_code=200)
+async def create_assignment(body: AssignmentCreate):
+    """Create an assignment card and process it synchronously via AI extraction."""
     db = get_supabase()
 
     file_resp = (
@@ -72,14 +36,38 @@ async def create_assignment(body: AssignmentCreate, background_tasks: Background
         "session_id":       body.session_id,
         "file_id":          body.file_id,
         "filename":         file_record["name"],
-        "processing_state": ProcessingState.QUEUED.value,
+        "processing_state": ProcessingState.PROCESSING.value,
         "created_at":       now,
         "updated_at":       now,
     }).execute()
 
-    background_tasks.add_task(_process_assignment, assignment_id, file_record.get("content") or "")
+    try:
+        extracted = await extract_assignment_data(file_record.get("content") or "")
 
-    return {"id": assignment_id, "processing_state": "queued", "created_at": now}
+        db.table("assignments").update({
+            "processing_state": ProcessingState.READY.value,
+            "title":            extracted.get("title"),
+            "module":           extracted.get("module"),
+            "due_date":         extracted.get("due_date"),
+            "weightage":        extracted.get("weightage"),
+            "assignment_type":  extracted.get("assignment_type"),
+            "deliverable_type": extracted.get("deliverable_type"),
+            "summary":          extracted.get("summary", []),
+            "checklist":        extracted.get("checklist", []),
+            "constraints":      extracted.get("constraints"),
+            "updated_at":       datetime.now(timezone.utc).isoformat(),
+        }).eq("id", assignment_id).execute()
+
+        row = db.table("assignments").select("*").eq("id", assignment_id).execute()
+        return row.data[0]
+
+    except Exception as exc:
+        db.table("assignments").update({
+            "processing_state": ProcessingState.FAILED.value,
+            "error_message":    str(exc)[:500],
+            "updated_at":       datetime.now(timezone.utc).isoformat(),
+        }).eq("id", assignment_id).execute()
+        raise HTTPException(status_code=500, detail=f"AI extraction failed: {exc}")
 
 
 @router.get("/")
