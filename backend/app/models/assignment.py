@@ -26,6 +26,7 @@ class AssignmentUpdate(BaseModel):
     weightage:        Optional[str]             = None
     assignment_type:  Optional[str]             = None
     deliverable_type: Optional[str]             = None
+    marks:            Optional[str]             = None
     processing_state: Optional[ProcessingState] = None
     kanban_column:    Optional[str]             = None
 
@@ -45,6 +46,7 @@ class Assignment(BaseModel):
     weightage:        Optional[str]       = None
     assignment_type:  Optional[str]       = None
     deliverable_type: Optional[str]       = None
+    marks:            Optional[str]       = None
     summary:          Optional[List[str]] = None
     checklist:        Optional[List[str]] = None
     constraints:      Optional[str]       = None

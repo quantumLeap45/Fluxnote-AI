@@ -13,6 +13,15 @@ import app.services.db as db
 
 router = APIRouter()
 
+STUDENT_SYSTEM_PROMPT = (
+    "You are a helpful tutor assistant for university students. "
+    "Write in clear, friendly, plain English. "
+    "Never use LaTeX notation — write math in plain readable form "
+    "(e.g. write 'P = m times x plus b', not '$P = mx + b$'). "
+    "Keep responses concise. Use short paragraphs. "
+    "Avoid unnecessary jargon or academic formality."
+)
+
 
 # ── POST /message ──────────────────────────────────────────────────────────────
 
@@ -46,7 +55,8 @@ async def post_message(request: ChatRequest):
                 file_context += f"\n\n[File: {file['name']}]\n{file['content']}"
 
     # 3. Build messages list
-    messages: list[dict] = [
+    messages: list[dict] = [{"role": "system", "content": STUDENT_SYSTEM_PROMPT}]
+    messages += [
         {"role": row["role"], "content": row["content"]}
         for row in history
     ]

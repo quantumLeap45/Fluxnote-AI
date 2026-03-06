@@ -77,6 +77,7 @@ async def create_assignment(body: AssignmentCreate):
                 "weightage":        extracted.get("weightage"),
                 "assignment_type":  extracted.get("assignment_type"),
                 "deliverable_type": extracted.get("deliverable_type"),
+                "marks":            extracted.get("marks"),
                 "summary":          extracted.get("summary", []),
                 "checklist":        extracted.get("checklist", []),
                 "constraints":      extracted.get("constraints"),
