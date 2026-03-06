@@ -167,7 +167,7 @@ export const streamChatMessage = async ({ message, model, fileIds, sessionId, on
             try {
                 const data = JSON.parse(line.slice(6));
                 if (data.type === 'chunk') onChunk(data.content);
-                if (data.type === 'done')  onDone(data.routed ? { models_used: data.models_used, total_tokens: data.total_tokens } : null);
+                if (data.type === 'done')  onDone(data.routed ? { models_used: data.models_used, total_tokens: data.total_tokens } : (data.total_tokens > 0 ? { total_tokens: data.total_tokens } : null));
                 if (data.type === 'error') onError(data.message);
             } catch { /* skip malformed lines */ }
         }

@@ -25,13 +25,13 @@ const MODEL_MAP = {
     'Deep Think': 'Deep Think',
 };
 
-function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage }) {
+const WELCOME_MSG = { id: 1, role: 'ai', content: "Hi! I'm Fluxnote — ask me anything: assignments, study help, writing, or general topics. Upload a file or open an assignment card to get started.", model: 'Fast' };
+
+function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache }) {
     const [selectedModel, setSelectedModel] = useState('Fast');
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [inputText, setInputText] = useState('');
-    const [messages, setMessages] = useState([
-        { id: 1, role: 'ai', content: 'Hello! I am your AI workspace assistant. You can chat with me, upload files for context, or manage your assignments in the Dashboard.', model: 'Fast' }
-    ]);
+    const [messages, setMessages] = useState([]);
     const [files, setFiles] = useState([]);
     const [uploading, setUploading] = useState(false);
     const [streaming, setStreaming] = useState(false);
@@ -41,17 +41,28 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
     const assignmentContextRef = useRef(null);
     const assignmentFileIdsRef = useRef([]);
 
-    // Load chat history on mount
+    // Cache messages on unmount so switching back is instant
+    const messagesRef = useRef(messages);
+    useEffect(() => { messagesRef.current = messages; }, [messages]);
     useEffect(() => {
+        return () => { if (historyCache && messagesRef.current.length) historyCache.set(sessionId, messagesRef.current); };
+    }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Load chat history on mount — check cache first
+    useEffect(() => {
+        const cached = historyCache?.get(sessionId);
+        if (cached) { setMessages(cached); return; }
         getChatHistory(sessionId).then(data => {
             if (data.messages?.length) {
                 setMessages(data.messages.map(m => ({
                     ...m,
                     role: m.role === 'assistant' ? 'ai' : 'user',
                 })));
+            } else {
+                setMessages([WELCOME_MSG]);
             }
-        }).catch(() => {});
-    }, [sessionId]);
+        }).catch(() => { setMessages([WELCOME_MSG]); });
+    }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Handle "Ask AI" context — pre-fill textarea, store metadata for first send + file IDs for whole session
     useEffect(() => {
@@ -259,9 +270,11 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                                 </div>
                                 {msg.attribution && (
                                     <div className="attribution-footer">
-                                        ⚡ Synthesised from {msg.attribution.models_used.join(' · ')}
+                                        {msg.attribution.models_used
+                                            ? <>⚡ Synthesised from {msg.attribution.models_used.join(' · ')}</>
+                                            : null}
                                         {msg.attribution.total_tokens > 0 && (
-                                            <span className="token-count"> · {msg.attribution.total_tokens.toLocaleString()} tokens</span>
+                                            <span className="token-count">{msg.attribution.models_used ? ' · ' : ''}{msg.attribution.total_tokens.toLocaleString()} tokens</span>
                                         )}
                                     </div>
                                 )}

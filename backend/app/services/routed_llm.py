@@ -106,10 +106,16 @@ async def classify_task(message: str) -> str:
     """
     Classify task type using keyword matching first.
     Falls back to a fast LLM call only when keywords give no signal.
+    Short messages with no task keywords are marked 'conversational' to skip MoA.
     """
     quick = _quick_classify(message)
     if quick:
         return quick
+
+    # Short message, no keyword signal → conversational (greetings, simple questions)
+    # Skip MoA overhead; route to single fast model in chat.py
+    if len(message.strip().split()) <= 10:
+        return "conversational"
 
     headers = _openrouter_headers()
     payload = {

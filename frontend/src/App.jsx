@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/ChatView';
 import DashboardView from './components/DashboardView';
@@ -22,6 +22,7 @@ function App() {
     const [activeTab, setActiveTab]         = useState('chat');
     const [chatContext, setChatContext]     = useState(null);
     const [assignments, setAssignments]     = useState([]);
+    const historyCacheRef                   = useRef(new Map());
 
     const refreshChats = useCallback(() => setChats(getStoredChats()), []);
 
@@ -116,6 +117,7 @@ function App() {
                         initialContext={chatContext}
                         onContextConsumed={() => setChatContext(null)}
                         onFirstMessage={handleFirstMessage}
+                        historyCache={historyCacheRef.current}
                     />
                 )}
                 {activeTab === 'dashboard' && (

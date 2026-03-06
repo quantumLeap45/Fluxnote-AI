@@ -17,12 +17,14 @@ MODEL_ID_MAP: dict[ModelTier, str] = {
 async def stream_chat_response(
     messages: list[dict],
     model_tier: ModelTier,
+    usage_out: dict | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Async generator that streams chat completion chunks from OpenRouter.
 
     Calls the /chat/completions endpoint with stream=True, parses SSE lines,
     and yields each content chunk as a plain string.
+    If usage_out dict is provided, it will be populated with token usage on completion.
     """
     model_id = MODEL_ID_MAP[model_tier]
 
@@ -37,6 +39,7 @@ async def stream_chat_response(
         "model": model_id,
         "messages": messages,
         "stream": True,
+        "stream_options": {"include_usage": True},
         "max_tokens": 2048,
     }
 
@@ -60,7 +63,10 @@ async def stream_chat_response(
 
                 try:
                     parsed = json.loads(data)
-                    chunk = parsed["choices"][0]["delta"]["content"]
+                    # Capture token usage from the final usage chunk
+                    if usage_out is not None and parsed.get("usage"):
+                        usage_out.update(parsed["usage"])
+                    chunk = parsed["choices"][0]["delta"].get("content") or ""
                     if chunk:
                         yield chunk
                 except (json.JSONDecodeError, KeyError, IndexError):
