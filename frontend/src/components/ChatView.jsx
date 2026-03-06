@@ -270,11 +270,13 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                                 </div>
                                 {msg.attribution && (
                                     <div className="attribution-footer">
-                                        {msg.attribution.models_used
-                                            ? <>⚡ Synthesised from {msg.attribution.models_used.join(' · ')}</>
-                                            : null}
+                                        {msg.attribution.simple
+                                            ? <>⚡ Routed — fast response</>
+                                            : msg.attribution.models_used
+                                                ? <>⚡ Synthesised from {msg.attribution.models_used.join(' · ')}</>
+                                                : null}
                                         {msg.attribution.total_tokens > 0 && (
-                                            <span className="token-count">{msg.attribution.models_used ? ' · ' : ''}{msg.attribution.total_tokens.toLocaleString()} tokens</span>
+                                            <span className="token-count"> · {msg.attribution.total_tokens.toLocaleString()} tokens</span>
                                         )}
                                     </div>
                                 )}

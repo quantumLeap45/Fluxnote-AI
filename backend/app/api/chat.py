@@ -144,12 +144,12 @@ async def post_message(request: ChatRequest):
                         })
                         .execute()
                     )
-                    # Still emit routed=True so the UI shows attribution footer
+                    # Emit routed=True but mark as simple so UI shows correct label
                     yield "data: " + json.dumps({
-                        "type":         "done",
-                        "routed":       True,
-                        "models_used":  ["Fast (simple query)"],
-                        "total_tokens": usage_out_conv.get("total_tokens", 0),
+                        "type":           "done",
+                        "routed":         True,
+                        "routed_simple":  True,
+                        "total_tokens":   usage_out_conv.get("total_tokens", 0),
                     }) + "\n\n"
 
                 else:

@@ -156,21 +156,26 @@ export const streamChatMessage = async ({ message, model, fileIds, sessionId, on
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    const processLine = (line) => {
+        if (!line.startsWith('data: ')) return;
+        try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'chunk') onChunk(data.content);
+            if (data.type === 'done')  onDone(data.routed ? { models_used: data.routed_simple ? null : data.models_used, total_tokens: data.total_tokens, simple: data.routed_simple } : (data.total_tokens > 0 ? { total_tokens: data.total_tokens } : null));
+            if (data.type === 'error') onError(data.message);
+        } catch { /* skip malformed lines */ }
+    };
     while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+            // Flush any remaining buffered line
+            if (buffer.trim()) processLine(buffer.trim());
+            break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop();
-        for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-                const data = JSON.parse(line.slice(6));
-                if (data.type === 'chunk') onChunk(data.content);
-                if (data.type === 'done')  onDone(data.routed ? { models_used: data.models_used, total_tokens: data.total_tokens } : (data.total_tokens > 0 ? { total_tokens: data.total_tokens } : null));
-                if (data.type === 'error') onError(data.message);
-            } catch { /* skip malformed lines */ }
-        }
+        for (const line of lines) processLine(line);
     }
 };
 
