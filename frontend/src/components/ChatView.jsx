@@ -30,7 +30,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
     const [uploading, setUploading] = useState(false);
     const [streaming, setStreaming] = useState(false);
     const [error, setError] = useState(null);
-    const messagesEndRef = useRef(null);
+    const messageListRef = useRef(null);
     const textareaRef = useRef(null);
     const assignmentContextRef = useRef(null);
 
@@ -54,9 +54,10 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
         onContextConsumed?.();
     }, [initialContext]);
 
-    // Auto-scroll to latest message
+    // Auto-scroll to latest message — scroll container, not the page
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const el = messageListRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
     }, [messages]);
 
     // Auto-resize textarea as content grows (capped at 200px by CSS)
@@ -218,7 +219,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
             )}
 
             {/* Message List */}
-            <div className="message-list">
+            <div className="message-list" ref={messageListRef}>
                 <div className="messages-wrapper">
                     {messages.map((msg) => (
                         <div key={msg.id} className={`message-row ${msg.role}`}>
@@ -252,7 +253,6 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                             </div>
                         </div>
                     ))}
-                    <div ref={messagesEndRef} />
                 </div>
             </div>
 
