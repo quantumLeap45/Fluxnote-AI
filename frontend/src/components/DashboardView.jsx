@@ -1,34 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import KanbanBoard from './KanbanBoard';
 import AssignmentDetail from './AssignmentDetail';
-import { listAssignments, deleteAssignment } from '../api';
 import './DashboardView.css';
 
-function DashboardView({ sessionId, onAskAI }) {
-    const [assignments, setAssignments] = useState([]);
+function DashboardView({ workspaceId, assignments, onAskAI, onAssignmentUpdate, onDeleteCard, onCardCreated }) {
     const [selectedCard, setSelectedCard] = useState(null);
-    const [error, setError] = useState(null);
-
-    useEffect(() => {
-        listAssignments(sessionId)
-            .then(data => setAssignments(data.assignments || []))
-            .catch(() => {});
-    }, [sessionId]);
-
-    const handleCardCreated = (card) => {
-        setAssignments(prev => [card, ...prev]);
-    };
-
-    const handleAssignmentUpdate = (updated) => {
-        setAssignments(prev => prev.map(a => a.id === updated.id ? updated : a));
-    };
 
     const handleDeleteCard = async (cardId) => {
-        try {
-            await deleteAssignment(cardId, sessionId);
-            setAssignments(prev => prev.filter(a => a.id !== cardId));
-            if (selectedCard?.id === cardId) setSelectedCard(null);
-        } catch { /* silent */ }
+        await onDeleteCard(cardId);
+        if (selectedCard?.id === cardId) setSelectedCard(null);
     };
 
     return (
@@ -40,26 +20,19 @@ function DashboardView({ sessionId, onAskAI }) {
                 </div>
             </header>
 
-            {error && (
-                <div className="error-banner">
-                    {error}
-                    <button onClick={() => setError(null)}>✕</button>
-                </div>
-            )}
-
             <KanbanBoard
                 assignments={assignments}
-                sessionId={sessionId}
+                sessionId={workspaceId}
                 onCardClick={setSelectedCard}
-                onAssignmentUpdate={handleAssignmentUpdate}
+                onAssignmentUpdate={onAssignmentUpdate}
                 onDeleteCard={handleDeleteCard}
-                onCardCreated={handleCardCreated}
+                onCardCreated={onCardCreated}
             />
 
             {selectedCard && (
                 <AssignmentDetail
                     assignment={selectedCard}
-                    sessionId={sessionId}
+                    sessionId={workspaceId}
                     onClose={() => setSelectedCard(null)}
                     onAskAI={(card) => {
                         setSelectedCard(null);

@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { Bot, User, Paperclip, Send, ChevronDown, FileText, X } from 'lucide-react';
 import {
     uploadFile,
@@ -16,7 +19,7 @@ const MODEL_MAP = {
     'Deep Think': 'Deep Think',
 };
 
-function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage }) {
+function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage }) {
     const [selectedModel, setSelectedModel] = useState('Fast');
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [inputText, setInputText] = useState('');
@@ -28,6 +31,8 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
     const [streaming, setStreaming] = useState(false);
     const [error, setError] = useState(null);
     const messagesEndRef = useRef(null);
+    const textareaRef = useRef(null);
+    const assignmentContextRef = useRef(null);
 
     // Load chat history on mount
     useEffect(() => {
@@ -41,11 +46,11 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
         }).catch(() => {});
     }, [sessionId]);
 
-    // Handle "Ask AI" context injected from Dashboard
+    // Handle "Ask AI" context — pre-fill textarea with clean question, store context for first send
     useEffect(() => {
         if (!initialContext) return;
-        const contextMsg = `I want to ask about this assignment: "${initialContext.title || initialContext.filename}"\n\nSummary: ${(initialContext.summary || []).join(' ')}\n\nChecklist: ${(initialContext.checklist || []).join(', ')}`;
-        setInputText(contextMsg);
+        assignmentContextRef.current = initialContext;
+        setInputText(`Help me understand my assignment: "${initialContext.title || initialContext.filename}"`);
         onContextConsumed?.();
     }, [initialContext]);
 
@@ -54,21 +59,48 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
+    // Auto-resize textarea as content grows (capped at 200px by CSS)
+    useEffect(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+    }, [inputText]);
+
     const handleSend = async () => {
         if (!inputText.trim() || streaming) return;
-        const userMsg = { id: Date.now(), role: 'user', content: inputText };
+
+        // Build the message shown in the UI bubble (always clean)
+        const displayText = inputText;
+
+        // Build the message sent to the API (may include invisible assignment context on first send)
+        let apiMessage = inputText;
+        if (assignmentContextRef.current) {
+            const ctx = assignmentContextRef.current;
+            const parts = [
+                ctx.module      && `Module: ${ctx.module}`,
+                ctx.due_date    && `Due date: ${ctx.due_date}`,
+                ctx.weightage   && `Weightage: ${ctx.weightage}`,
+                ctx.constraints && `Constraints: ${ctx.constraints}`,
+                ctx.summary?.length  && `Summary:\n${ctx.summary.map(s => `• ${s}`).join('\n')}`,
+                ctx.checklist?.length && `Checklist:\n${ctx.checklist.map(c => `• ${c}`).join('\n')}`,
+            ].filter(Boolean).join('\n');
+            apiMessage = `${inputText}\n\n[Assignment context — ${ctx.title || ctx.filename}]\n${parts}`;
+            assignmentContextRef.current = null;
+        }
+
+        const userMsg = { id: Date.now(), role: 'user', content: displayText };
         setMessages(prev => [...prev, userMsg]);
-        const sentText = inputText;
         setInputText('');
         setStreaming(true);
         setError(null);
-        // Save chat title from first user message
-        onFirstMessage?.(sessionId, sentText);
+
+        onFirstMessage?.(sessionId, displayText);
         const aiMsgId = Date.now() + 1;
         setMessages(prev => [...prev, { id: aiMsgId, role: 'ai', content: '', model: selectedModel, attribution: null }]);
 
         await streamChatMessage({
-            message: sentText,
+            message: apiMessage,
             model: selectedModel,
             fileIds: files.map(f => f.id),
             sessionId,
@@ -125,7 +157,7 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
 
     const handleAddToDashboard = async (fileId) => {
         try {
-            await createAssignment(fileId, sessionId);
+            await createAssignment(fileId, workspaceId);
             setFiles(prev => prev.map(f => f.id === fileId ? { ...f, addedToDashboard: true } : f));
         } catch (err) {
             setError(`Could not create assignment card: ${err.message}`);
@@ -203,7 +235,10 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
                                     {msg.role === 'ai' ? (
                                         msg.content === '' && streaming
                                             ? <span className="typing-indicator">…</span>
-                                            : <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                            : <ReactMarkdown
+                                                remarkPlugins={[remarkMath]}
+                                                rehypePlugins={[rehypeKatex]}
+                                              >{msg.content}</ReactMarkdown>
                                     ) : msg.content}
                                 </div>
                                 {msg.attribution && (
@@ -266,6 +301,7 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
                     </label>
 
                     <textarea
+                        ref={textareaRef}
                         className="prompt-input"
                         placeholder="Message Fluxnote..."
                         value={inputText}

@@ -3,6 +3,17 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 // ── Session & Chat History ──────────────────────────────────────────────────
 const ACTIVE_CHAT_KEY = 'fluxnote_active_chat';
 const CHATS_KEY       = 'fluxnote_chats';
+const WORKSPACE_KEY   = 'fluxnote_workspace_id';
+
+export const getWorkspaceId = () => {
+    let id = localStorage.getItem(WORKSPACE_KEY);
+    if (!id) {
+        // Migration: seed from current active chat so existing users keep their cards
+        id = localStorage.getItem(ACTIVE_CHAT_KEY) || crypto.randomUUID();
+        localStorage.setItem(WORKSPACE_KEY, id);
+    }
+    return id;
+};
 
 export const getSessionId = () => {
     // Migrate from old key if needed
