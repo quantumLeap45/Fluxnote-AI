@@ -17,7 +17,7 @@ Use this exact schema:
   "marks":           "marks or score breakdown exactly as written in the document e.g. 'Part A: 5 marks, Part B: 10 marks, Total: 15 marks' — or null if not found",
   "summary":         ["3 to 6 bullet strings — the core tasks or questions the student must answer or complete. Use the document's own words and framing. Do not reinterpret or substitute terminology."],
   "checklist":       ["6 to 15 step-by-step actionable tasks the student must complete to finish this assignment, in logical order"],
-  "constraints":     "A plain-English paragraph (or bullet list) capturing ALL explicit rules, limits, and notes from the document. Always try to include: (1) what the student must NOT do or what is restricted; (2) format or length limits (word count, page limit, font, citation style); (3) tool or method restrictions or freedoms; (4) data or resource dependencies (e.g. group-specific datasets, reference documents, provided templates); (5) objective or goal framing exactly as stated (e.g. the exact metric to optimise); (6) sensibility or quality expectations stated in the document; (7) submission or late-penalty policies if present. Quote the document directly. If none found, output null."
+  "constraints":     "Structured markdown with labelled bullet groups. Only include groups that are present in the document. Use exactly these heading names where applicable:\\n## What NOT To Do\\n- ...\\n## Format & Length Limits\\n- ...\\n## Tools & Methods\\n- ...\\n## Data & Resources\\n- ...\\n## Objective & Goal\\n- ...\\n## Quality Expectations\\n- ...\\n## Submission & Late Policy\\n- ...\\nUse the document's own words. If no constraints found, output null."
 }
 
 Rules (apply to ALL assignments regardless of subject):

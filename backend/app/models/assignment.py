@@ -49,6 +49,7 @@ class Assignment(BaseModel):
     marks:            Optional[str]       = None
     summary:          Optional[List[str]] = None
     checklist:        Optional[List[str]] = None
-    constraints:      Optional[str]       = None
-    created_at:       datetime
-    updated_at:       datetime
+    constraints:       Optional[str]       = None
+    extraction_version: Optional[int]      = None
+    created_at:        datetime
+    updated_at:        datetime

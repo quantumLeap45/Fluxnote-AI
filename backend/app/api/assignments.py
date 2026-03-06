@@ -86,6 +86,7 @@ async def create_assignment(body: AssignmentCreate):
                 "summary":          extracted.get("summary", []),
                 "checklist":        extracted.get("checklist", []),
                 "constraints":      extracted.get("constraints"),
+                "extraction_version": 2,
                 "updated_at":       datetime.now(timezone.utc).isoformat(),
             })
             .eq("id", assignment_id)
@@ -179,3 +180,106 @@ async def delete_assignment(assignment_id: str, session_id: str = Query(...)):
         .execute()
     )
     return {"success": True}
+
+
+@router.post("/{assignment_id}/re-extract")
+async def re_extract_assignment(assignment_id: str, session_id: str = Query(...)):
+    """Re-run AI extraction on an existing card using the latest prompt."""
+    row = await (
+        db.table("assignments")
+        .select("*")
+        .eq("id", assignment_id)
+        .eq("session_id", session_id)
+        .execute()
+    )
+    if not row.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    assignment = row.data[0]
+    all_file_ids = assignment.get("file_ids") or ([assignment["file_id"]] if assignment.get("file_id") else [])
+    if not all_file_ids:
+        raise HTTPException(status_code=400, detail="No files attached to this assignment")
+
+    file_resp = await (
+        db.table("files")
+        .select("id, name, content")
+        .in_("id", all_file_ids)
+        .eq("session_id", session_id)
+        .execute()
+    )
+    if not file_resp.data:
+        raise HTTPException(status_code=404, detail="Source files not found")
+
+    char_budget = 8000
+    per_file = char_budget // len(file_resp.data)
+    combined_content = "\n\n---\n\n".join(
+        f"[File: {f['name']}]\n{(f.get('content') or '')[:per_file]}"
+        for f in file_resp.data
+    )
+
+    await (
+        db.table("assignments")
+        .update({
+            "processing_state": ProcessingState.PROCESSING.value,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", assignment_id)
+        .execute()
+    )
+
+    try:
+        extracted = await extract_assignment_data(combined_content)
+
+        import re as _re
+        raw_due = extracted.get("due_date")
+        safe_due_date = raw_due if raw_due and _re.match(r'^\d{4}-\d{2}-\d{2}$', str(raw_due)) else None
+
+        await (
+            db.table("assignments")
+            .update({
+                "processing_state": ProcessingState.READY.value,
+                "title":            extracted.get("title"),
+                "module":           extracted.get("module"),
+                "due_date":         safe_due_date,
+                "weightage":        extracted.get("weightage"),
+                "assignment_type":  extracted.get("assignment_type"),
+                "deliverable_type": extracted.get("deliverable_type"),
+                "marks":            extracted.get("marks"),
+                "summary":          extracted.get("summary", []),
+                "checklist":        extracted.get("checklist", []),
+                "constraints":      extracted.get("constraints"),
+                "extraction_version": 2,
+                "updated_at":       datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", assignment_id)
+            .execute()
+        )
+
+        updated = await db.table("assignments").select("*").eq("id", assignment_id).execute()
+        return updated.data[0]
+
+    except asyncio.TimeoutError:
+        await (
+            db.table("assignments")
+            .update({
+                "processing_state": ProcessingState.FAILED.value,
+                "error_message": "Re-extraction timed out — please retry",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", assignment_id)
+            .execute()
+        )
+        raise HTTPException(status_code=504, detail="AI re-extraction timed out — please retry")
+
+    except Exception as exc:
+        await (
+            db.table("assignments")
+            .update({
+                "processing_state": ProcessingState.FAILED.value,
+                "error_message": str(exc)[:500],
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", assignment_id)
+            .execute()
+        )
+        raise HTTPException(status_code=500, detail=f"Re-extraction failed: {exc}")
