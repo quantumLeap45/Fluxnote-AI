@@ -6,11 +6,17 @@ import 'katex/dist/katex.min.css';
 import { Bot, User, Paperclip, Send, ChevronDown, FileText, X } from 'lucide-react';
 import {
     uploadFile,
+    uploadToStorage,
+    processStorageFile,
     deleteFile,
     streamChatMessage,
     getChatHistory,
     createAssignment,
 } from '../api';
+
+const SUPABASE_CONFIGURED = !!(
+    import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 import './ChatView.css';
 
 const MODEL_MAP = {
@@ -141,7 +147,13 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
             if (files.length >= 5) break;
             setUploading(true);
             try {
-                const result = await uploadFile(file, sessionId);
+                let result;
+                if (SUPABASE_CONFIGURED) {
+                    const { path } = await uploadToStorage(file, sessionId);
+                    result = await processStorageFile(path, file.name, sessionId);
+                } else {
+                    result = await uploadFile(file, sessionId);
+                }
                 setFiles(prev => [...prev, { ...result, addedToDashboard: false }]);
             } catch (err) {
                 setError(`Upload failed: ${err.message}`);

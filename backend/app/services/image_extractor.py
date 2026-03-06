@@ -15,7 +15,8 @@ _VISION_PROMPT = (
     "Return plain text only — no commentary, no formatting, no markdown."
 )
 
-_MAX_IMAGES = 5
+_MAX_IMAGES = 20
+_MIN_IMAGE_BYTES = 5_000  # skip decorative images (logos, icons) — too small to contain text
 
 
 def _extract_images_from_docx(content: bytes) -> List[bytes]:
@@ -27,7 +28,10 @@ def _extract_images_from_docx(content: bytes) -> List[bytes]:
                     name.lower().endswith(ext)
                     for ext in (".png", ".jpg", ".jpeg")
                 ):
-                    images.append(zf.read(name))
+                    img_bytes = zf.read(name)
+                    if len(img_bytes) < _MIN_IMAGE_BYTES:
+                        continue  # skip decorative/icon images
+                    images.append(img_bytes)
                     if len(images) >= _MAX_IMAGES:
                         break
     except Exception:
@@ -43,7 +47,10 @@ def _extract_images_from_pdf(content: bytes) -> List[bytes]:
             for page in doc:
                 for block in page.get_text("dict")["blocks"]:
                     if block.get("type") == 1:
-                        images.append(block["image"])
+                        img_bytes = block["image"]
+                        if len(img_bytes) < _MIN_IMAGE_BYTES:
+                            continue  # skip decorative/icon images
+                        images.append(img_bytes)
                         if len(images) >= _MAX_IMAGES:
                             return images
     except Exception:
