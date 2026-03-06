@@ -200,6 +200,7 @@
     line-height: 1.4;
     max-height: 200px;
     min-height: 24px;
+    overflow-y: auto;
 }
 
 .prompt-input::placeholder {
@@ -484,4 +485,9 @@
     padding-left: 12px;
     margin: 8px 0;
     color: var(--text-secondary);
+}
+
+/* ── KaTeX — ensure math renders on dark background ─────────────────────── */
+.message-row.ai .message-text .katex {
+    color: var(--text-primary, #f1f5f9);
 }
