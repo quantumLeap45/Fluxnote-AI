@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
+import { Plus } from 'lucide-react';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { useDraggable } from '@dnd-kit/core';
 import KanbanColumn from './KanbanColumn';
 import AssignmentCard from './AssignmentCard';
+import CardCreationPanel from './CardCreationPanel';
 import { updateAssignment } from '../api';
 import './KanbanBoard.css';
 
 const COLUMNS = ['todo', 'doing', 'done'];
 
-function DraggableCard({ assignment, sessionId, onCardClick }) {
+function DraggableCard({ assignment, sessionId, onCardClick, onDeleteCard }) {
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: assignment.id,
         data: { column: assignment.kanban_column || 'todo' },
@@ -24,13 +26,15 @@ function DraggableCard({ assignment, sessionId, onCardClick }) {
                 assignment={assignment}
                 sessionId={sessionId}
                 onClick={onCardClick}
+                onDelete={onDeleteCard}
             />
         </div>
     );
 }
 
-function KanbanBoard({ assignments, sessionId, onCardClick, onAssignmentUpdate }) {
+function KanbanBoard({ assignments, sessionId, onCardClick, onAssignmentUpdate, onDeleteCard, onCardCreated }) {
     const [activeCard, setActiveCard] = useState(null);
+    const [showCreationPanel, setShowCreationPanel] = useState(false);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -65,17 +69,38 @@ function KanbanBoard({ assignments, sessionId, onCardClick, onAssignmentUpdate }
         }
     };
 
+    const todoFooter = showCreationPanel ? (
+        <CardCreationPanel
+            sessionId={sessionId}
+            onCardCreated={(card) => {
+                onCardCreated?.(card);
+                setShowCreationPanel(false);
+            }}
+            onCancel={() => setShowCreationPanel(false)}
+        />
+    ) : (
+        <button className="new-card-btn" onClick={() => setShowCreationPanel(true)}>
+            <Plus size={13} /> New Card
+        </button>
+    );
+
     return (
         <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="kanban-board">
                 {COLUMNS.map(col => (
-                    <KanbanColumn key={col} columnId={col} count={grouped[col].length}>
+                    <KanbanColumn
+                        key={col}
+                        columnId={col}
+                        count={grouped[col].length}
+                        footer={col === 'todo' ? todoFooter : undefined}
+                    >
                         {grouped[col].map(card => (
                             <DraggableCard
                                 key={card.id}
                                 assignment={card}
                                 sessionId={sessionId}
                                 onCardClick={onCardClick}
+                                onDeleteCard={onDeleteCard}
                             />
                         ))}
                     </KanbanColumn>

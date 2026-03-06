@@ -200,6 +200,7 @@
     line-height: 1.4;
     max-height: 200px;
     min-height: 24px;
+    overflow-y: auto;
 }
 
 .prompt-input::placeholder {
@@ -395,4 +396,98 @@
 .token-count {
     color: var(--text-muted, #6b7280);
     opacity: 0.7;
+}
+
+/* ── v0.5 — User bubble right / AI prose markdown ───────────────────────── */
+
+/* User messages: right-aligned blue bubble */
+.message-row.user {
+    flex-direction: row-reverse;
+}
+
+.message-row.user .message-avatar {
+    background-color: var(--accent-color, #3b82f6);
+    color: white;
+}
+
+.message-row.user .message-content {
+    background: var(--accent-color, #3b82f6);
+    color: white;
+    padding: 10px 14px;
+    border-radius: 18px 18px 4px 18px;
+    max-width: 75%;
+    flex: 0 1 auto;
+}
+
+.message-row.user .message-text {
+    color: white;
+}
+
+/* AI prose: markdown element styles */
+.message-row.ai .message-text p {
+    margin: 0 0 8px;
+}
+
+.message-row.ai .message-text p:last-child {
+    margin-bottom: 0;
+}
+
+.message-row.ai .message-text h1,
+.message-row.ai .message-text h2,
+.message-row.ai .message-text h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 12px 0 4px;
+    color: var(--text-primary);
+}
+
+.message-row.ai .message-text ul,
+.message-row.ai .message-text ol {
+    margin: 4px 0 8px;
+    padding-left: 20px;
+}
+
+.message-row.ai .message-text li {
+    margin-bottom: 4px;
+}
+
+.message-row.ai .message-text code {
+    font-family: var(--font-mono, monospace);
+    font-size: 13px;
+    background: var(--bg-input, #1a1a2e);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: #a78bfa;
+}
+
+.message-row.ai .message-text pre {
+    background: var(--bg-input, #1a1a2e);
+    border: 1px solid var(--border-color, #2a2a3e);
+    border-radius: var(--radius-md, 8px);
+    padding: 12px;
+    overflow-x: auto;
+    margin: 8px 0;
+}
+
+.message-row.ai .message-text pre code {
+    background: none;
+    padding: 0;
+    color: var(--text-primary);
+}
+
+.message-row.ai .message-text strong {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.message-row.ai .message-text blockquote {
+    border-left: 3px solid var(--border-color, #2a2a3e);
+    padding-left: 12px;
+    margin: 8px 0;
+    color: var(--text-secondary);
+}
+
+/* ── KaTeX — ensure math renders on dark background ─────────────────────── */
+.message-row.ai .message-text .katex {
+    color: var(--text-primary, #f1f5f9);
 }

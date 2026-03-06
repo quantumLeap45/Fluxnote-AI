@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
 
     # File constraints
-    MAX_FILE_SIZE_MB: int = 4
+    MAX_FILE_SIZE_MB: int = 20
     MAX_FILES_PER_SESSION: int = 5
 
     # CORS — frontend origin(s)

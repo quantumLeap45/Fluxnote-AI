@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, Trash2 } from 'lucide-react';
 import { getAssignment, retryAssignment } from '../api';
 import './AssignmentCard.css';
 
@@ -12,7 +12,7 @@ const SUBSTATUS = [
 
 const POLL_INTERVAL = 3000;
 
-function AssignmentCard({ assignment: initial, sessionId, onClick }) {
+function AssignmentCard({ assignment: initial, sessionId, onClick, onDelete }) {
     const [card, setCard] = useState(initial);
     const [substatusIdx, setSubstatusIdx] = useState(0);
 
@@ -39,6 +39,13 @@ function AssignmentCard({ assignment: initial, sessionId, onClick }) {
         return () => clearInterval(timer);
     }, [card.processing_state]);
 
+    const handleDelete = (e) => {
+        e.stopPropagation();
+        if (window.confirm(`Delete "${card.title || card.filename}"?`)) {
+            onDelete?.(card.id);
+        }
+    };
+
     const handleRetry = async (e) => {
         e.stopPropagation();
         try {
@@ -52,6 +59,11 @@ function AssignmentCard({ assignment: initial, sessionId, onClick }) {
             className={`assignment-card state-${card.processing_state}`}
             onClick={() => card.processing_state === 'ready' && onClick(card)}
         >
+            {onDelete && (
+                <button className="card-delete-btn" onClick={handleDelete} title="Delete card">
+                    <Trash2 size={14} />
+                </button>
+            )}
             {/* Processing / Queued states */}
             {(card.processing_state === 'queued' || card.processing_state === 'processing') && (
                 <div className="card-processing">
@@ -73,6 +85,9 @@ function AssignmentCard({ assignment: initial, sessionId, onClick }) {
                     <div className="card-header-row">
                         <span className="state-badge ready">Ready</span>
                         {card.due_date && <span className="due-date">Due {card.due_date}</span>}
+                        {card.file_ids?.length > 1 && (
+                            <span className="multi-file-badge">+{card.file_ids.length - 1} files</span>
+                        )}
                     </div>
                     <h3 className="card-title">{card.title || card.filename}</h3>
                     {card.module && <p className="card-module">{card.module}</p>}

@@ -96,7 +96,8 @@ button {
   flex-direction: column;
   background-color: var(--bg-app);
   position: relative;
-  min-width: 0; /* Important for flex children to allow text truncation if needed */
+  min-width: 0;
+  overflow: hidden; /* Contain scrolling to child components, not the page */
 }
 
 /* Utility Animations */

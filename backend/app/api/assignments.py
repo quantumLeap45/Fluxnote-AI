@@ -15,18 +15,36 @@ router = APIRouter()
 
 @router.post("/", status_code=200)
 async def create_assignment(body: AssignmentCreate):
-    """Create an assignment card and process it synchronously via AI extraction."""
+    """Create an assignment card and process it synchronously via AI extraction.
+
+    Accepts either a single file_id (legacy) or a file_ids list (v0.5 multi-file).
+    """
+    # Resolve which files to use
+    ids_to_fetch = body.file_ids if body.file_ids else ([body.file_id] if body.file_id else [])
+    if not ids_to_fetch:
+        raise HTTPException(status_code=400, detail="file_id or file_ids is required")
+
     file_resp = await (
         db.table("files")
-        .select("name, content")
-        .eq("id", body.file_id)
+        .select("id, name, content")
+        .in_("id", ids_to_fetch)
         .eq("session_id", body.session_id)
         .execute()
     )
     if not file_resp.data:
         raise HTTPException(status_code=404, detail="File not found in this session")
 
-    file_record = file_resp.data[0]
+    # Combine content — 8000-char budget split evenly across files
+    char_budget = 8000
+    per_file = char_budget // len(file_resp.data)
+    combined_content = "\n\n---\n\n".join(
+        f"[File: {f['name']}]\n{(f.get('content') or '')[:per_file]}"
+        for f in file_resp.data
+    )
+
+    primary = file_resp.data[0]
+    all_file_ids = [f["id"] for f in file_resp.data]
+
     now = datetime.now(timezone.utc).isoformat()
     assignment_id = str(uuid.uuid4())
 
@@ -35,8 +53,9 @@ async def create_assignment(body: AssignmentCreate):
         .insert({
             "id":               assignment_id,
             "session_id":       body.session_id,
-            "file_id":          body.file_id,
-            "filename":         file_record["name"],
+            "file_id":          primary["id"],
+            "file_ids":         all_file_ids,
+            "filename":         primary["name"],
             "processing_state": ProcessingState.PROCESSING.value,
             "kanban_column":    "todo",
             "created_at":       now,
@@ -46,7 +65,12 @@ async def create_assignment(body: AssignmentCreate):
     )
 
     try:
-        extracted = await extract_assignment_data(file_record.get("content") or "")
+        extracted = await extract_assignment_data(combined_content)
+
+        # due_date must be a valid ISO date or None — never pass descriptive strings to the DB
+        import re as _re
+        raw_due = extracted.get("due_date")
+        safe_due_date = raw_due if raw_due and _re.match(r'^\d{4}-\d{2}-\d{2}$', str(raw_due)) else None
 
         await (
             db.table("assignments")
@@ -54,13 +78,15 @@ async def create_assignment(body: AssignmentCreate):
                 "processing_state": ProcessingState.READY.value,
                 "title":            extracted.get("title"),
                 "module":           extracted.get("module"),
-                "due_date":         extracted.get("due_date"),
+                "due_date":         safe_due_date,
                 "weightage":        extracted.get("weightage"),
                 "assignment_type":  extracted.get("assignment_type"),
                 "deliverable_type": extracted.get("deliverable_type"),
+                "marks":            extracted.get("marks"),
                 "summary":          extracted.get("summary", []),
                 "checklist":        extracted.get("checklist", []),
                 "constraints":      extracted.get("constraints"),
+                "extraction_version": 2,
                 "updated_at":       datetime.now(timezone.utc).isoformat(),
             })
             .eq("id", assignment_id)
@@ -154,3 +180,106 @@ async def delete_assignment(assignment_id: str, session_id: str = Query(...)):
         .execute()
     )
     return {"success": True}
+
+
+@router.post("/{assignment_id}/re-extract")
+async def re_extract_assignment(assignment_id: str, session_id: str = Query(...)):
+    """Re-run AI extraction on an existing card using the latest prompt."""
+    row = await (
+        db.table("assignments")
+        .select("*")
+        .eq("id", assignment_id)
+        .eq("session_id", session_id)
+        .execute()
+    )
+    if not row.data:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    assignment = row.data[0]
+    all_file_ids = assignment.get("file_ids") or ([assignment["file_id"]] if assignment.get("file_id") else [])
+    if not all_file_ids:
+        raise HTTPException(status_code=400, detail="No files attached to this assignment")
+
+    file_resp = await (
+        db.table("files")
+        .select("id, name, content")
+        .in_("id", all_file_ids)
+        .eq("session_id", session_id)
+        .execute()
+    )
+    if not file_resp.data:
+        raise HTTPException(status_code=404, detail="Source files not found")
+
+    char_budget = 8000
+    per_file = char_budget // len(file_resp.data)
+    combined_content = "\n\n---\n\n".join(
+        f"[File: {f['name']}]\n{(f.get('content') or '')[:per_file]}"
+        for f in file_resp.data
+    )
+
+    await (
+        db.table("assignments")
+        .update({
+            "processing_state": ProcessingState.PROCESSING.value,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        .eq("id", assignment_id)
+        .execute()
+    )
+
+    try:
+        extracted = await extract_assignment_data(combined_content)
+
+        import re as _re
+        raw_due = extracted.get("due_date")
+        safe_due_date = raw_due if raw_due and _re.match(r'^\d{4}-\d{2}-\d{2}$', str(raw_due)) else None
+
+        await (
+            db.table("assignments")
+            .update({
+                "processing_state": ProcessingState.READY.value,
+                "title":            extracted.get("title"),
+                "module":           extracted.get("module"),
+                "due_date":         safe_due_date,
+                "weightage":        extracted.get("weightage"),
+                "assignment_type":  extracted.get("assignment_type"),
+                "deliverable_type": extracted.get("deliverable_type"),
+                "marks":            extracted.get("marks"),
+                "summary":          extracted.get("summary", []),
+                "checklist":        extracted.get("checklist", []),
+                "constraints":      extracted.get("constraints"),
+                "extraction_version": 2,
+                "updated_at":       datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", assignment_id)
+            .execute()
+        )
+
+        updated = await db.table("assignments").select("*").eq("id", assignment_id).execute()
+        return updated.data[0]
+
+    except asyncio.TimeoutError:
+        await (
+            db.table("assignments")
+            .update({
+                "processing_state": ProcessingState.FAILED.value,
+                "error_message": "Re-extraction timed out — please retry",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", assignment_id)
+            .execute()
+        )
+        raise HTTPException(status_code=504, detail="AI re-extraction timed out — please retry")
+
+    except Exception as exc:
+        await (
+            db.table("assignments")
+            .update({
+                "processing_state": ProcessingState.FAILED.value,
+                "error_message": str(exc)[:500],
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", assignment_id)
+            .execute()
+        )
+        raise HTTPException(status_code=500, detail=f"Re-extraction failed: {exc}")

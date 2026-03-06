@@ -1,0 +1,129 @@
+.card-creation-panel {
+    background: var(--bg-input, #16213e);
+    border: 1px solid var(--border-color, #2a2a3e);
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.creation-drop-zone {
+    border: 1.5px dashed var(--border-color, #2a2a3e);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary, #9ca3af);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s;
+    user-select: none;
+}
+
+.creation-drop-zone:hover,
+.creation-drop-zone.dragging {
+    border-color: var(--accent-color, #3b82f6);
+    background: rgba(59, 130, 246, 0.06);
+    color: var(--text-primary, #f1f5f9);
+}
+
+.creation-limit {
+    margin-left: auto;
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+.creation-file-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.creation-file-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-tertiary, #252535);
+    padding: 4px 8px;
+    border-radius: 6px;
+    color: var(--text-secondary, #9ca3af);
+}
+
+.creation-file-name {
+    flex: 1;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.creation-file-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary, #9ca3af);
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    border-radius: 4px;
+}
+
+.creation-file-remove:hover:not(:disabled) {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.creation-error {
+    font-size: 11px;
+    color: #f87171;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.creation-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.creation-cancel-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: transparent;
+    border: 1px solid var(--border-color, #2a2a3e);
+    color: var(--text-secondary, #9ca3af);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.creation-cancel-btn:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+}
+
+.creation-create-btn {
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    background: var(--accent-color, #3b82f6);
+    border: none;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.15s;
+}
+
+.creation-create-btn:hover:not(:disabled) {
+    background: var(--accent-hover, #2563eb);
+}
+
+.creation-create-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

@@ -3,6 +3,17 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 // ── Session & Chat History ──────────────────────────────────────────────────
 const ACTIVE_CHAT_KEY = 'fluxnote_active_chat';
 const CHATS_KEY       = 'fluxnote_chats';
+const WORKSPACE_KEY   = 'fluxnote_workspace_id';
+
+export const getWorkspaceId = () => {
+    let id = localStorage.getItem(WORKSPACE_KEY);
+    if (!id) {
+        // Migration: seed from current active chat so existing users keep their cards
+        id = localStorage.getItem(ACTIVE_CHAT_KEY) || crypto.randomUUID();
+        localStorage.setItem(WORKSPACE_KEY, id);
+    }
+    return id;
+};
 
 export const getSessionId = () => {
     // Migrate from old key if needed
@@ -51,6 +62,45 @@ export const renameChatTitle = (id, newTitle) => {
     if (idx < 0) return;
     chats[idx] = { ...chats[idx], title: newTitle.trim().slice(0, 55) };
     localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+};
+
+// ── Supabase Storage — direct browser upload (bypasses Vercel 4.5MB limit) ──
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const uploadToStorage = async (file, sessionId) => {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase storage is not configured (missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).');
+    }
+    const MAX_BYTES = 20 * 1024 * 1024;
+    if (file.size > MAX_BYTES) {
+        throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 20 MB.`);
+    }
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${sessionId}/${Date.now()}-${safeName}`;
+    const res = await fetch(`${SUPABASE_URL}/storage/v1/object/uploads/${path}?upsert=true`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': file.type || 'application/octet-stream',
+        },
+        body: file,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Storage upload failed (${res.status})`);
+    }
+    return { path, name: file.name };
+};
+
+export const processStorageFile = async (storagePath, filename, sessionId) => {
+    const res = await fetch(`${API_BASE}/api/v1/files/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storage_path: storagePath, filename, session_id: sessionId }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'File processing failed');
+    return res.json();
 };
 
 // ── Files ──────────────────────────────────────────────────────────────────
@@ -106,21 +156,26 @@ export const streamChatMessage = async ({ message, model, fileIds, sessionId, on
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    const processLine = (line) => {
+        if (!line.startsWith('data: ')) return;
+        try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'chunk') onChunk(data.content);
+            if (data.type === 'done')  onDone(data.routed ? { models_used: data.routed_simple ? null : data.models_used, total_tokens: data.total_tokens, simple: data.routed_simple } : (data.total_tokens > 0 ? { total_tokens: data.total_tokens } : null));
+            if (data.type === 'error') onError(data.message);
+        } catch { /* skip malformed lines */ }
+    };
     while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+            // Flush any remaining buffered line
+            if (buffer.trim()) processLine(buffer.trim());
+            break;
+        }
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop();
-        for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-                const data = JSON.parse(line.slice(6));
-                if (data.type === 'chunk') onChunk(data.content);
-                if (data.type === 'done')  onDone(data.routed ? { models_used: data.models_used, total_tokens: data.total_tokens } : null);
-                if (data.type === 'error') onError(data.message);
-            } catch { /* skip malformed lines */ }
-        }
+        for (const line of lines) processLine(line);
     }
 };
 
@@ -177,3 +232,21 @@ export const deleteAssignment = async (assignmentId, sessionId) => {
 
 export const retryAssignment = (assignmentId, sessionId) =>
     updateAssignment(assignmentId, { processing_state: 'queued' }, sessionId);
+
+export const reExtractAssignment = async (assignmentId, sessionId) => {
+    const res = await fetch(`${API_BASE}/api/v1/assignments/${assignmentId}/re-extract?session_id=${sessionId}`, {
+        method: 'POST',
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Re-extraction failed');
+    return res.json();
+};
+
+export const createAssignmentMulti = async (fileIds, sessionId) => {
+    const res = await fetch(`${API_BASE}/api/v1/assignments/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_ids: fileIds, session_id: sessionId }),
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Failed to create card');
+    return res.json();
+};

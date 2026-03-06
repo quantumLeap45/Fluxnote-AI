@@ -1,12 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { Bot, User, Paperclip, Send, ChevronDown, FileText, X } from 'lucide-react';
 import {
     uploadFile,
+    uploadToStorage,
+    processStorageFile,
     deleteFile,
     streamChatMessage,
     getChatHistory,
     createAssignment,
 } from '../api';
+
+const SUPABASE_CONFIGURED = !!(
+    import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 import './ChatView.css';
 
 const MODEL_MAP = {
@@ -15,61 +25,105 @@ const MODEL_MAP = {
     'Deep Think': 'Deep Think',
 };
 
-function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage }) {
+const WELCOME_MSG = { id: 1, role: 'ai', content: "Hi! I'm Fluxnote — ask me anything: assignments, study help, writing, or general topics. Upload a file or open an assignment card to get started.", model: 'Fast' };
+
+function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache }) {
     const [selectedModel, setSelectedModel] = useState('Fast');
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [inputText, setInputText] = useState('');
-    const [messages, setMessages] = useState([
-        { id: 1, role: 'ai', content: 'Hello! I am your AI workspace assistant. You can chat with me, upload files for context, or manage your assignments in the Dashboard.', model: 'Fast' }
-    ]);
+    const [messages, setMessages] = useState([]);
     const [files, setFiles] = useState([]);
     const [uploading, setUploading] = useState(false);
     const [streaming, setStreaming] = useState(false);
     const [error, setError] = useState(null);
-    const messagesEndRef = useRef(null);
+    const messageListRef = useRef(null);
+    const textareaRef = useRef(null);
+    const assignmentContextRef = useRef(null);
+    const assignmentFileIdsRef = useRef([]);
 
-    // Load chat history on mount
+    // Cache messages on unmount so switching back is instant
+    const messagesRef = useRef(messages);
+    useEffect(() => { messagesRef.current = messages; }, [messages]);
     useEffect(() => {
+        return () => { if (historyCache && messagesRef.current.length) historyCache.set(sessionId, messagesRef.current); };
+    }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Load chat history on mount — check cache first
+    useEffect(() => {
+        const cached = historyCache?.get(sessionId);
+        if (cached) { setMessages(cached); return; }
         getChatHistory(sessionId).then(data => {
             if (data.messages?.length) {
                 setMessages(data.messages.map(m => ({
                     ...m,
                     role: m.role === 'assistant' ? 'ai' : 'user',
                 })));
+            } else {
+                setMessages([WELCOME_MSG]);
             }
-        }).catch(() => {});
-    }, [sessionId]);
+        }).catch(() => { setMessages([WELCOME_MSG]); });
+    }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Handle "Ask AI" context injected from Dashboard
+    // Handle "Ask AI" context — pre-fill textarea, store metadata for first send + file IDs for whole session
     useEffect(() => {
         if (!initialContext) return;
-        const contextMsg = `I want to ask about this assignment: "${initialContext.title || initialContext.filename}"\n\nSummary: ${(initialContext.summary || []).join(' ')}\n\nChecklist: ${(initialContext.checklist || []).join(', ')}`;
-        setInputText(contextMsg);
+        assignmentContextRef.current = initialContext;
+        assignmentFileIdsRef.current = initialContext.file_ids
+            || (initialContext.file_id ? [initialContext.file_id] : []);
+        setInputText(`Help me understand my assignment: "${initialContext.title || initialContext.filename}"`);
         onContextConsumed?.();
     }, [initialContext]);
 
-    // Auto-scroll to latest message
+    // Auto-scroll to latest message — scroll container, not the page
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const el = messageListRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
     }, [messages]);
+
+    // Auto-resize textarea as content grows (capped at 200px by CSS)
+    useEffect(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+    }, [inputText]);
 
     const handleSend = async () => {
         if (!inputText.trim() || streaming) return;
-        const userMsg = { id: Date.now(), role: 'user', content: inputText };
+
+        // Build the message shown in the UI bubble (always clean)
+        const displayText = inputText;
+
+        // Build the message sent to the API (may include invisible assignment context on first send)
+        let apiMessage = inputText;
+        if (assignmentContextRef.current) {
+            const ctx = assignmentContextRef.current;
+            const parts = [
+                ctx.module      && `Module: ${ctx.module}`,
+                ctx.due_date    && `Due date: ${ctx.due_date}`,
+                ctx.weightage   && `Weightage: ${ctx.weightage}`,
+                ctx.constraints && `Constraints: ${ctx.constraints}`,
+                ctx.summary?.length  && `Summary:\n${ctx.summary.map(s => `• ${s}`).join('\n')}`,
+                ctx.checklist?.length && `Checklist:\n${ctx.checklist.map(c => `• ${c}`).join('\n')}`,
+            ].filter(Boolean).join('\n');
+            apiMessage = `${inputText}\n\n[Assignment context — ${ctx.title || ctx.filename}]\n${parts}`;
+            assignmentContextRef.current = null;
+        }
+
+        const userMsg = { id: Date.now(), role: 'user', content: displayText };
         setMessages(prev => [...prev, userMsg]);
-        const sentText = inputText;
         setInputText('');
         setStreaming(true);
         setError(null);
-        // Save chat title from first user message
-        onFirstMessage?.(sessionId, sentText);
+
+        onFirstMessage?.(sessionId, displayText);
         const aiMsgId = Date.now() + 1;
         setMessages(prev => [...prev, { id: aiMsgId, role: 'ai', content: '', model: selectedModel, attribution: null }]);
 
         await streamChatMessage({
-            message: sentText,
+            message: apiMessage,
             model: selectedModel,
-            fileIds: files.map(f => f.id),
+            fileIds: [...assignmentFileIdsRef.current, ...files.map(f => f.id)],
             sessionId,
             onChunk: (chunk) => {
                 setMessages(prev => prev.map(m =>
@@ -104,7 +158,13 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
             if (files.length >= 5) break;
             setUploading(true);
             try {
-                const result = await uploadFile(file, sessionId);
+                let result;
+                if (SUPABASE_CONFIGURED) {
+                    const { path } = await uploadToStorage(file, sessionId);
+                    result = await processStorageFile(path, file.name, sessionId);
+                } else {
+                    result = await uploadFile(file, sessionId);
+                }
                 setFiles(prev => [...prev, { ...result, addedToDashboard: false }]);
             } catch (err) {
                 setError(`Upload failed: ${err.message}`);
@@ -124,7 +184,7 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
 
     const handleAddToDashboard = async (fileId) => {
         try {
-            await createAssignment(fileId, sessionId);
+            await createAssignment(fileId, workspaceId);
             setFiles(prev => prev.map(f => f.id === fileId ? { ...f, addedToDashboard: true } : f));
         } catch (err) {
             setError(`Could not create assignment card: ${err.message}`);
@@ -185,7 +245,7 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
             )}
 
             {/* Message List */}
-            <div className="message-list">
+            <div className="message-list" ref={messageListRef}>
                 <div className="messages-wrapper">
                     {messages.map((msg) => (
                         <div key={msg.id} className={`message-row ${msg.role}`}>
@@ -199,14 +259,22 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
                                     </div>
                                 )}
                                 <div className="message-text">
-                                    {msg.content}
-                                    {streaming && msg.role === 'ai' && msg.content === '' && (
-                                        <span className="typing-indicator">…</span>
-                                    )}
+                                    {msg.role === 'ai' ? (
+                                        msg.content === '' && streaming
+                                            ? <span className="typing-indicator">…</span>
+                                            : <ReactMarkdown
+                                                remarkPlugins={[remarkMath]}
+                                                rehypePlugins={[rehypeKatex]}
+                                              >{msg.content}</ReactMarkdown>
+                                    ) : msg.content}
                                 </div>
                                 {msg.attribution && (
                                     <div className="attribution-footer">
-                                        ⚡ Synthesised from {msg.attribution.models_used.join(' · ')}
+                                        {msg.attribution.simple
+                                            ? <>⚡ Routed — fast response</>
+                                            : msg.attribution.models_used
+                                                ? <>⚡ Synthesised from {msg.attribution.models_used.join(' · ')}</>
+                                                : null}
                                         {msg.attribution.total_tokens > 0 && (
                                             <span className="token-count"> · {msg.attribution.total_tokens.toLocaleString()} tokens</span>
                                         )}
@@ -215,7 +283,6 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
                             </div>
                         </div>
                     ))}
-                    <div ref={messagesEndRef} />
                 </div>
             </div>
 
@@ -264,6 +331,7 @@ function ChatView({ sessionId, initialContext, onContextConsumed, onFirstMessage
                     </label>
 
                     <textarea
+                        ref={textareaRef}
                         className="prompt-input"
                         placeholder="Message Fluxnote..."
                         value={inputText}

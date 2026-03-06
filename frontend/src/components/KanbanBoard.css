@@ -59,3 +59,39 @@
     padding: 12px;
     flex: 1;
 }
+
+.kanban-column-empty {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 12px;
+    padding: 24px 12px;
+    opacity: 0.5;
+    pointer-events: none;
+    user-select: none;
+}
+
+.kanban-column-footer {
+    padding: 8px 12px 12px;
+}
+
+.new-card-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+    background: transparent;
+    border: 1.5px dashed var(--border-color, #2a2a3e);
+    color: var(--text-secondary, #9ca3af);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.new-card-btn:hover {
+    border-color: var(--accent-color, #3b82f6);
+    color: var(--accent-color, #3b82f6);
+    background: rgba(59, 130, 246, 0.06);
+}
