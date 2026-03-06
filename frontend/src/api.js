@@ -228,6 +228,14 @@ export const deleteAssignment = async (assignmentId, sessionId) => {
 export const retryAssignment = (assignmentId, sessionId) =>
     updateAssignment(assignmentId, { processing_state: 'queued' }, sessionId);
 
+export const reExtractAssignment = async (assignmentId, sessionId) => {
+    const res = await fetch(`${API_BASE}/api/v1/assignments/${assignmentId}/re-extract?session_id=${sessionId}`, {
+        method: 'POST',
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Re-extraction failed');
+    return res.json();
+};
+
 export const createAssignmentMulti = async (fileIds, sessionId) => {
     const res = await fetch(`${API_BASE}/api/v1/assignments/`, {
         method: 'POST',
