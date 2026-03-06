@@ -33,6 +33,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
     const messageListRef = useRef(null);
     const textareaRef = useRef(null);
     const assignmentContextRef = useRef(null);
+    const assignmentFileIdsRef = useRef([]);
 
     // Load chat history on mount
     useEffect(() => {
@@ -46,10 +47,12 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
         }).catch(() => {});
     }, [sessionId]);
 
-    // Handle "Ask AI" context — pre-fill textarea with clean question, store context for first send
+    // Handle "Ask AI" context — pre-fill textarea, store metadata for first send + file IDs for whole session
     useEffect(() => {
         if (!initialContext) return;
         assignmentContextRef.current = initialContext;
+        assignmentFileIdsRef.current = initialContext.file_ids
+            || (initialContext.file_id ? [initialContext.file_id] : []);
         setInputText(`Help me understand my assignment: "${initialContext.title || initialContext.filename}"`);
         onContextConsumed?.();
     }, [initialContext]);
@@ -103,7 +106,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
         await streamChatMessage({
             message: apiMessage,
             model: selectedModel,
-            fileIds: files.map(f => f.id),
+            fileIds: [...assignmentFileIdsRef.current, ...files.map(f => f.id)],
             sessionId,
             onChunk: (chunk) => {
                 setMessages(prev => prev.map(m =>

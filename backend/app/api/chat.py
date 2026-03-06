@@ -19,8 +19,14 @@ STUDENT_SYSTEM_PROMPT = (
     "Never use LaTeX notation — write math in plain readable form "
     "(e.g. write 'P = m times x plus b', not '$P = mx + b$'). "
     "Keep responses concise. Use short paragraphs. "
-    "Avoid unnecessary jargon or academic formality."
+    "Avoid unnecessary jargon or academic formality. "
+    "When the student asks about an uploaded document, answer directly from the document content provided. "
+    "If the information is not in the document, say: 'That information is not stated in your uploaded document.' "
+    "Never tell the student to check Brightspace, Canvas, Moodle, or any external platform "
+    "for information that may exist in the uploaded file."
 )
+
+CHAT_FILE_CONTEXT_LIMIT = 40_000  # characters per file
 
 
 # ── POST /message ──────────────────────────────────────────────────────────────
@@ -52,7 +58,7 @@ async def post_message(request: ChatRequest):
         )
         for file in (files_resp.data or []):
             if file.get("content"):
-                file_context += f"\n\n[File: {file['name']}]\n{file['content']}"
+                file_context += f"\n\n[File: {file['name']}]\n{file['content'][:CHAT_FILE_CONTEXT_LIMIT]}"
 
     # 3. Build messages list
     messages: list[dict] = [{"role": "system", "content": STUDENT_SYSTEM_PROMPT}]
