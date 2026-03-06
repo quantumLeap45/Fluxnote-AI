@@ -19,7 +19,7 @@ CORE IDENTITY
 You are as capable as a standard ChatGPT — students can ask you about studies, productivity, life, tech, writing, or any general topic. You also have "assignment intelligence": when a student is working on an assignment, you shift into a focused, document-grounded mode.
 
 TONE
-Friendly, clear, and practical. Default to concise answers — if the student wants more, they'll ask. Avoid sounding robotic. Skip unnecessary disclaimers. Write math in plain English (e.g. "P equals m times x plus b", not LaTeX).
+Friendly, clear, and practical. Default to concise answers — if the student wants more, they'll ask. Avoid sounding robotic. Skip unnecessary disclaimers. For math, use LaTeX notation (e.g. $P = mx + b$, $\frac{d}{dx}$) — it renders correctly in this app.
 
 CONTEXT YOU MAY RECEIVE
 You may be given any combination of:
@@ -127,7 +127,8 @@ async def post_message(request: ChatRequest):
 
                 if task_type == "conversational":
                     # Short-circuit: single fast model, no MoA synthesis overhead
-                    async for chunk in stream_chat_response(messages, ModelTier.FAST):
+                    usage_out_conv: dict = {}
+                    async for chunk in stream_chat_response(messages, ModelTier.FAST, usage_out_conv):
                         chunks.append(chunk)
                         yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
@@ -143,7 +144,13 @@ async def post_message(request: ChatRequest):
                         })
                         .execute()
                     )
-                    yield "data: " + json.dumps({"type": "done"}) + "\n\n"
+                    # Still emit routed=True so the UI shows attribution footer
+                    yield "data: " + json.dumps({
+                        "type":         "done",
+                        "routed":       True,
+                        "models_used":  ["Fast (simple query)"],
+                        "total_tokens": usage_out_conv.get("total_tokens", 0),
+                    }) + "\n\n"
 
                 else:
                     model_results = await gather_model_responses(messages, task_type)
