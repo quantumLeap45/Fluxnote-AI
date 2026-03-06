@@ -47,7 +47,7 @@ async def post_message(request: ChatRequest):
     )
     history: list[dict] = history_resp.data or []
 
-    # 2. Fetch file context
+    # 2. Fetch file context — total budget split evenly across all files
     file_context = ""
     if request.file_ids:
         files_resp = await (
@@ -56,9 +56,11 @@ async def post_message(request: ChatRequest):
             .in_("id", request.file_ids)
             .execute()
         )
-        for file in (files_resp.data or []):
-            if file.get("content"):
-                file_context += f"\n\n[File: {file['name']}]\n{file['content'][:CHAT_FILE_CONTEXT_LIMIT]}"
+        active_files = [f for f in (files_resp.data or []) if f.get("content")]
+        if active_files:
+            per_file_limit = CHAT_FILE_CONTEXT_LIMIT // len(active_files)
+            for file in active_files:
+                file_context += f"\n\n[File: {file['name']}]\n{file['content'][:per_file_limit]}"
 
     # 3. Build messages list
     messages: list[dict] = [{"role": "system", "content": STUDENT_SYSTEM_PROMPT}]
