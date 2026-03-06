@@ -6,7 +6,11 @@ import { reExtractAssignment } from '../api';
 
 function AssignmentDetail({ assignment: initial, sessionId, onClose, onAskAI }) {
     const [localCard, setLocalCard] = useState(initial);
-    const [checkedItems, setCheckedItems] = useState(new Set());
+    const checklistKey = `fluxnote_checklist_${initial.id}`;
+    const [checkedItems, setCheckedItems] = useState(() => {
+        try { return new Set(JSON.parse(localStorage.getItem(checklistKey) || '[]')); }
+        catch { return new Set(); }
+    });
 
     const CURRENT_VERSION = 2;
     const dismissKey = `fluxnote_dismissed_upgrade_${localCard.id}`;
@@ -19,6 +23,7 @@ function AssignmentDetail({ assignment: initial, sessionId, onClose, onAskAI }) 
         setCheckedItems(prev => {
             const next = new Set(prev);
             next.has(item) ? next.delete(item) : next.add(item);
+            localStorage.setItem(checklistKey, JSON.stringify([...next]));
             return next;
         });
     };
