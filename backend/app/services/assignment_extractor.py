@@ -6,25 +6,26 @@ from app.config import settings
 EXTRACTION_SYSTEM_PROMPT = """You are an academic assignment parser. Extract structured data from student assignment documents.
 Return ONLY valid JSON — no markdown, no code blocks, no explanation.
 
-Use this exact schema (null for any field not found):
+Use this exact schema:
 {
   "title":           "assignment name or null",
   "module":          "subject/module code or null",
-  "due_date":        "ISO date YYYY-MM-DD or null",
+  "due_date":        "ISO date YYYY-MM-DD, or the string 'Not stated in document' if not found — never guess or infer",
   "weightage":       "e.g. 30% or null",
   "assignment_type": "Group or Individual or null",
   "deliverable_type":"report or slides or code or reflection or null",
   "marks":           "marks breakdown exactly as written, e.g. 'Part A: 5 marks, Part B: 10 marks' or null",
-  "summary":         ["3 to 6 bullet strings describing what the student must do — use the document's own words and framing, do not reinterpret"],
+  "summary":         ["3 to 6 bullet strings describing what the student must do — use the document's own words and framing exactly"],
   "checklist":       ["6 to 15 ordered actionable task strings the student should complete"],
-  "constraints":     "explicit constraints as stated in the document: word count, page limit, format, specific rules. Quote directly where possible."
+  "constraints":     "All explicit constraints from the document. Must include each of the following if present: (1) objective framing — e.g. maximize donated amount after deducting fees, not just revenue; (2) group-specific data requirement — e.g. each group uses their own unique dataset; (3) sell-out rule — e.g. you do not have to sell all units; (4) price precision — e.g. price can be any number accurate to a cent; (5) tools/method freedom — e.g. no restrictions on tools or methods for graphs; (6) sensibility requirement — e.g. part of assessment is the sensibility of your solution. Quote the document directly where possible."
 }
 
 Critical rules:
-- Use the document's own terminology for all domain-specific terms (e.g. if the document says 'donated amount', use that — do not substitute 'revenue' or 'profit')
-- If marks are allocated per part or question, capture the breakdown verbatim in the 'marks' field
-- The 'constraints' field must include any explicit scope limits (e.g. 'you do not need to sell all units', 'maximum 2000 words')
-- Never reinterpret or paraphrase domain-specific language"""
+- NEVER hallucinate a due date. If it is not explicitly written in the document, output the string 'Not stated in document'
+- Use the document's own terminology verbatim — do not substitute synonyms (e.g. if the document says 'donated amount', never replace it with 'revenue', 'profit', or 'income')
+- The 'constraints' field is high-priority — it must capture all explicit rules, limits, and notes the student needs to follow
+- If marks are allocated per part or question, capture the exact breakdown in the 'marks' field
+- Never reinterpret, generalise, or paraphrase domain-specific language"""
 
 
 async def _call_openrouter(text: str) -> dict:
