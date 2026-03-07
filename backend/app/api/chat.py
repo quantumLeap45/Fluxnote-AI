@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import AsyncGenerator
@@ -19,18 +20,19 @@ CORE IDENTITY
 You are as capable as a standard ChatGPT — students can ask you about studies, productivity, life, tech, writing, or any general topic. You also have "assignment intelligence": when a student is working on an assignment, you shift into a focused, document-grounded mode.
 
 TONE
-Friendly, clear, and practical. Default to concise answers — if the student wants more, they'll ask. Avoid sounding robotic. Skip unnecessary disclaimers. For math, use LaTeX notation (e.g. $P = mx + b$, $\frac{d}{dx}$) — it renders correctly in this app.
+Friendly, clear, and practical. Default to concise answers — if the student wants more, they'll ask. Avoid sounding robotic. Skip unnecessary disclaimers. For math, use LaTeX notation (e.g. $P = mx + b$, $\\frac{d}{dx}$) — it renders correctly in this app.
 
 CONTEXT YOU MAY RECEIVE
 You may be given any combination of:
-1. Dashboard assignment card fields (title, module, due date, weightage, summary, checklist, constraints)
-2. Full extracted text from uploaded documents
-3. Conversation history
-If the uploaded document text conflicts with the card summary, the document text takes priority.
+1. A dashboard manifest listing all the student's assignments (title, module, due date, type, status)
+2. A retrieved assignment block — full details and document text for a specific assignment, fetched automatically when the student references it
+3. Full extracted text from manually uploaded documents
+4. Conversation history
+If document text conflicts with card summary fields, document text takes priority.
 
 GROUNDING RULES — FOLLOW STRICTLY
 - Never invent assignment requirements, due dates, word counts, topic lists, penalties, or source restrictions.
-- When asked for specific details, look first in the uploaded document text, then in the card fields.
+- When asked for specific details, look first in the retrieved document text, then in the card fields.
 - If the information is not found in either, say exactly: "Not stated in the uploaded document."
 - Never tell the student to check Brightspace, Canvas, Moodle, or any LMS if the information exists in the uploaded file. Only suggest checking external sources when the information is genuinely absent from the document.
 
@@ -57,15 +59,163 @@ For non-assignment questions, respond like a normal helpful assistant. Be suppor
 INTEGRITY
 Do not assist with plagiarism evasion, AI-detection bypassing, or rule-dodging. Help students learn and write in their own voice."""
 
-CHAT_FILE_CONTEXT_LIMIT = 40_000  # characters per file
+CHAT_FILE_CONTEXT_LIMIT = 40_000   # chars — total budget for explicitly uploaded files
+RESOLVED_DOC_LIMIT      = 20_000   # chars per file for on-demand resolved assignments
+
+# ── Manifest entry regex ────────────────────────────────────────────────────
+# Matches lines like:  #1 [id:abc-123] Title | Module | Due: ... | ...
+_MANIFEST_ENTRY_RE = re.compile(
+    r'#\d+\s+\[id:([a-f0-9\-]+)\]\s+(.*?)(?:\n|$)',
+    re.IGNORECASE,
+)
+
+# Common words too generic for title matching
+_STOP_WORDS = {
+    'with', 'from', 'that', 'this', 'have', 'your', 'their', 'about',
+    'what', 'the', 'and', 'for', 'not', 'but', 'help', 'more', 'some',
+    'tell', 'give', 'show', 'need', 'want', 'like', 'just', 'also',
+    'can', 'will', 'how', 'when', 'where', 'which', 'its', 'our',
+}
+
+
+def _match_assignment_id(message: str, manifest: str) -> str | None:
+    """
+    Tiered assignment resolution against the dashboard manifest.
+      Tier 1 — explicit UUID found in message
+      Tier 2 — module code match (e.g. "COMP301", "ENG101")
+      Tier 3 — title keyword overlap (≥2 significant words, or 1 long word ≥8 chars)
+    Returns the matched assignment_id string, or None.
+    """
+    lower = message.lower()
+    entries: list[dict] = []
+
+    for m in _MANIFEST_ENTRY_RE.finditer(manifest):
+        aid  = m.group(1)
+        rest = m.group(2)
+        parts  = [p.strip() for p in rest.split('|')]
+        title  = parts[0].lower() if parts else ''
+        module = parts[1].lower() if len(parts) > 1 else ''
+        entries.append({'id': aid, 'title': title, 'module': module})
+
+    if not entries:
+        return None
+
+    # Tier 1 — explicit assignment ID in message
+    for e in entries:
+        if e['id'] in message:
+            return e['id']
+
+    # Tier 2 — module code (min 3 chars)
+    for e in entries:
+        mod = e['module']
+        if mod and len(mod) >= 3 and mod in lower:
+            return e['id']
+
+    # Tier 3 — title keyword overlap
+    scored: list[tuple[int, str]] = []
+    for e in entries:
+        words = [
+            w for w in re.split(r'\W+', e['title'])
+            if len(w) >= 4 and w not in _STOP_WORDS
+        ]
+        if not words:
+            continue
+        hits     = sum(1 for w in words if w in lower)
+        long_hit = any(len(w) >= 8 and w in lower for w in words)
+        all_hit  = hits == len(words) and len(words) >= 1
+        if hits >= 2 or long_hit or all_hit:
+            scored.append((hits, e['id']))
+
+    if len(scored) == 1:
+        return scored[0][1]
+    if len(scored) > 1:
+        scored.sort(key=lambda x: x[0], reverse=True)
+        if scored[0][0] > scored[1][0]:   # unambiguous winner
+            return scored[0][1]
+
+    return None
+
+
+async def resolve_assignment_context(
+    message: str,
+    manifest: str | None,
+    workspace_id: str | None,
+    already_has_files: bool,
+) -> str:
+    """
+    On-demand context resolver (Approach C — smart intent detection + injection).
+
+    If the user's message references a specific assignment and no file context is
+    already loaded, fetches that assignment's full metadata and document text and
+    returns it as a formatted context block ready for injection.
+
+    Returns empty string when: no manifest, no workspace, file context already
+    set (Ask AI flow), or no clear assignment match found.
+    """
+    if already_has_files or not workspace_id or not manifest:
+        return ""
+
+    matched_id = _match_assignment_id(message, manifest)
+    if not matched_id:
+        return ""
+
+    try:
+        a_resp = await (
+            db.table("assignments")
+            .select(
+                "title, filename, module, due_date, weightage, assignment_type, "
+                "deliverable_type, summary, checklist, constraints, file_ids, file_id"
+            )
+            .eq("id", matched_id)
+            .eq("session_id", workspace_id)
+            .execute()
+        )
+        if not a_resp.data:
+            return ""
+
+        a = a_resp.data[0]
+        parts = [
+            f"[RETRIEVED ASSIGNMENT: {a.get('title') or a.get('filename') or 'Untitled'}]",
+            f"Module: {a.get('module') or 'Not stated'}",
+            f"Due: {a.get('due_date') or 'Not stated'}",
+            f"Weightage: {a.get('weightage') or 'Not stated'}",
+            f"Type: {a.get('assignment_type') or 'Not stated'}",
+            f"Deliverable: {a.get('deliverable_type') or 'Not stated'}",
+        ]
+        if a.get('summary'):
+            parts.append("Summary:\n" + '\n'.join(f"  • {s}" for s in a['summary']))
+        if a.get('checklist'):
+            parts.append("Checklist:\n" + '\n'.join(f"  • {c}" for c in a['checklist']))
+        if a.get('constraints'):
+            parts.append(f"Requirements & Constraints:\n{a['constraints']}")
+
+        # Fetch extracted document text
+        file_ids = a.get('file_ids') or ([a['file_id']] if a.get('file_id') else [])
+        if file_ids:
+            files_resp = await (
+                db.table("files")
+                .select("name, content")
+                .in_("id", file_ids)
+                .execute()
+            )
+            for f in (files_resp.data or []):
+                if f.get('content'):
+                    parts.append(
+                        f"[Full Document: {f['name']}]\n{f['content'][:RESOLVED_DOC_LIMIT]}"
+                    )
+
+        return '\n\n'.join(parts)
+
+    except Exception:
+        return ""
 
 
 # ── POST /message ──────────────────────────────────────────────────────────────
 
 @router.post("/message")
 async def post_message(request: ChatRequest):
-    """Stream an AI response via SSE. Fetches history, prepends file context,
-    saves both user and assistant messages, streams the response."""
+    """Stream an AI response via SSE. Resolves assignment context on-demand,
+    fetches history, prepends file context, saves messages, streams response."""
 
     # 1. Fetch conversation history
     history_resp = await (
@@ -78,7 +228,7 @@ async def post_message(request: ChatRequest):
     )
     history: list[dict] = history_resp.data or []
 
-    # 2. Fetch file context — total budget split evenly across all files
+    # 2. Fetch explicit file context (files attached via upload / Ask AI flow)
     file_context = ""
     if request.file_ids:
         files_resp = await (
@@ -93,19 +243,19 @@ async def post_message(request: ChatRequest):
             for file in active_files:
                 file_context += f"\n\n[File: {file['name']}]\n{file['content'][:per_file_limit]}"
 
-    # 3. Build messages list
+    # 3. Build system content
     system_content = STUDENT_SYSTEM_PROMPT
     if request.assignments_manifest:
         system_content += f"\n\n---\n{request.assignments_manifest}"
-    messages: list[dict] = [{"role": "system", "content": system_content}]
-    messages += [
+
+    # 4. Build base messages (history only — user message added inside stream after resolution)
+    base_messages: list[dict] = [{"role": "system", "content": system_content}]
+    base_messages += [
         {"role": row["role"], "content": row["content"]}
         for row in history
     ]
-    user_content = request.message + file_context
-    messages.append({"role": "user", "content": user_content})
 
-    # 4. Persist user message before streaming
+    # 5. Persist clean user message before streaming
     await (
         db.table("chat_messages")
         .insert({
@@ -119,17 +269,32 @@ async def post_message(request: ChatRequest):
         .execute()
     )
 
-    # 5. SSE generator
+    # 6. SSE generator
     async def event_stream() -> AsyncGenerator[str, None]:
         chunks: list[str] = []
         try:
             yield "data: " + json.dumps({"type": "start"}) + "\n\n"
 
+            # ── On-demand context resolution ──────────────────────────────────
+            # Detects if message references a specific assignment → fetches its
+            # full details + doc text → injects into context before model call.
+            # Skipped if: file context already set, no workspace_id, no manifest.
+            resolved = await resolve_assignment_context(
+                message=request.message,
+                manifest=request.assignments_manifest,
+                workspace_id=request.workspace_id,
+                already_has_files=bool(request.file_ids),
+            )
+
+            extra        = ('\n\n' + resolved) if resolved else ''
+            user_content = request.message + extra + file_context
+            messages     = base_messages + [{"role": "user", "content": user_content}]
+
+            # ── Model dispatch ────────────────────────────────────────────────
             if request.model == ModelTier.ROUTED:
                 task_type = await classify_task(user_content)
 
                 if task_type == "conversational":
-                    # Short-circuit: single fast model, no MoA synthesis overhead
                     usage_out_conv: dict = {}
                     async for chunk in stream_chat_response(messages, ModelTier.FAST, usage_out_conv):
                         chunks.append(chunk)
@@ -147,7 +312,6 @@ async def post_message(request: ChatRequest):
                         })
                         .execute()
                     )
-                    # Emit routed=True but mark as simple so UI shows correct label
                     yield "data: " + json.dumps({
                         "type":           "done",
                         "routed":         True,

@@ -17,6 +17,7 @@ class ChatRequest(BaseModel):
     file_ids: List[str] = []
     session_id: str
     assignments_manifest: Optional[str] = None
+    workspace_id: Optional[str] = None
 
 
 class Message(BaseModel):

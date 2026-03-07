@@ -162,6 +162,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
             fileIds: [...assignmentFileIdsRef.current, ...files.map(f => f.id)],
             sessionId,
             assignmentsManifest: buildAssignmentsManifest(assignments),
+            workspaceId,
             onChunk: (chunk) => {
                 setMessages(prev => prev.map(m =>
                     m.id === aiMsgId ? { ...m, content: m.content + chunk } : m
