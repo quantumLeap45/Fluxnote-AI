@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { Bot, User, Paperclip, Send, ChevronDown, FileText, X } from 'lucide-react';
@@ -281,7 +282,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                                         msg.content === '' && streaming
                                             ? <span className="typing-indicator">…</span>
                                             : <ReactMarkdown
-                                                remarkPlugins={[remarkMath]}
+                                                remarkPlugins={[remarkMath, remarkGfm]}
                                                 rehypePlugins={[rehypeKatex]}
                                               >{msg.content}</ReactMarkdown>
                                     ) : msg.content}

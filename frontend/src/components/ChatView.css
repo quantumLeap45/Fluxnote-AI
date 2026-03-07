@@ -487,6 +487,34 @@
     color: var(--text-secondary);
 }
 
+/* ── Markdown tables ─────────────────────────────────────────────────────── */
+.message-row.ai .message-text table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0;
+    font-size: 13.5px;
+    overflow-x: auto;
+    display: block;
+}
+
+.message-row.ai .message-text th,
+.message-row.ai .message-text td {
+    border: 1px solid var(--border-color, #2a2a3e);
+    padding: 7px 12px;
+    text-align: left;
+    white-space: normal;
+}
+
+.message-row.ai .message-text th {
+    background: var(--bg-input, #1a1a2e);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.message-row.ai .message-text tr:nth-child(even) td {
+    background: rgba(255, 255, 255, 0.025);
+}
+
 /* ── KaTeX — ensure math renders on dark background ─────────────────────── */
 .message-row.ai .message-text .katex {
     color: var(--text-primary, #f1f5f9);
