@@ -515,7 +515,98 @@
     background: rgba(255, 255, 255, 0.025);
 }
 
-/* ── KaTeX — ensure math renders on dark background ─────────────────────── */
+/* ── ThinkingPanel — Deep Think reasoning trace ──────────────────────────── */
+.thinking-panel {
+    margin-bottom: 10px;
+    border-left: 2px solid rgba(139, 92, 246, 0.5);
+    border-radius: 0 6px 6px 0;
+    background: rgba(139, 92, 246, 0.05);
+    overflow: hidden;
+}
+
+.thinking-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #a78bfa;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.thinking-header:hover {
+    background: rgba(139, 92, 246, 0.08);
+}
+
+.thinking-pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #a78bfa;
+    flex-shrink: 0;
+    animation: thinkPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes thinkPulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.85); }
+    50%       { opacity: 1;   transform: scale(1); }
+}
+
+.thinking-label {
+    flex: 1;
+}
+
+.thinking-toggle {
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+.thinking-body {
+    padding: 4px 12px 10px 12px;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-secondary, #94a3b8);
+    white-space: pre-wrap;
+    max-height: 220px;
+    overflow-y: auto;
+    font-family: var(--font-mono, monospace);
+}
+
+/* ── RoutingStatusPanel — Routed MoA progress ───────────────────────────── */
+.routing-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 0 8px 0;
+    font-size: 12px;
+    color: var(--text-secondary, #94a3b8);
+}
+
+.routing-icon {
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.routing-label {
+    flex: 1;
+}
+
+.routing-task-badge {
+    font-size: 10px;
+    background: rgba(245, 158, 11, 0.12);
+    color: #f59e0b;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+/* ── Markdown tables ─────────────────────────────────────────────────────── */
 .message-row.ai .message-text .katex {
     color: var(--text-primary, #f1f5f9);
 }

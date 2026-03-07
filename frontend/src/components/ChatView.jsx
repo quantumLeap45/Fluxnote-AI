@@ -135,7 +135,14 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
 
         onFirstMessage?.(sessionId, displayText);
         const aiMsgId = Date.now() + 1;
-        setMessages(prev => [...prev, { id: aiMsgId, role: 'ai', content: '', model: selectedModel, attribution: null }]);
+        const isDeepThink = selectedModel === 'Deep Think';
+        const isRouted    = selectedModel === 'Routed';
+        const aiMsg = {
+            id: aiMsgId, role: 'ai', content: '', model: selectedModel, attribution: null,
+            ...(isDeepThink && { thinking: '', thinkingDone: false }),
+            ...(isRouted    && { routingStep: 'classifying', routingModels: [], routingTask: null }),
+        };
+        setMessages(prev => [...prev, aiMsg]);
 
         await streamChatMessage({
             message: apiMessage,
@@ -149,12 +156,26 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                     m.id === aiMsgId ? { ...m, content: m.content + chunk } : m
                 ));
             },
+            onThinkingChunk: (chunk) => {
+                setMessages(prev => prev.map(m =>
+                    m.id === aiMsgId ? { ...m, thinking: (m.thinking || '') + chunk } : m
+                ));
+            },
+            onRoutingStatus: (data) => {
+                setMessages(prev => prev.map(m =>
+                    m.id === aiMsgId ? {
+                        ...m,
+                        routingStep:   data.step,
+                        routingModels: data.models || m.routingModels,
+                        routingTask:   data.task   || m.routingTask,
+                    } : m
+                ));
+            },
             onDone: (attribution) => {
-                if (attribution) {
-                    setMessages(prev => prev.map(m =>
-                        m.id === aiMsgId ? { ...m, attribution } : m
-                    ));
-                }
+                setMessages(prev => prev.map(m => {
+                    if (m.id !== aiMsgId) return m;
+                    return { ...m, attribution, thinkingDone: true };
+                }));
                 setStreaming(false);
             },
             onError: (msg) => {
@@ -277,14 +298,32 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                                         {msg.model === 'Routed' ? '⚡ Routed' : msg.model}
                                     </div>
                                 )}
+                                {/* Routing status panel — Routed mode only, while gathering */}
+                                {msg.routingStep && !msg.attribution && (
+                                    <RoutingStatusPanel
+                                        step={msg.routingStep}
+                                        models={msg.routingModels || []}
+                                        task={msg.routingTask}
+                                    />
+                                )}
+                                {/* Thinking panel — Deep Think only */}
+                                {msg.thinking !== undefined && (
+                                    <ThinkingPanel
+                                        thinking={msg.thinking || ''}
+                                        done={msg.thinkingDone}
+                                        streaming={streaming}
+                                    />
+                                )}
                                 <div className="message-text">
                                     {msg.role === 'ai' ? (
-                                        msg.content === '' && streaming
+                                        msg.content === '' && streaming && msg.thinking === undefined && !msg.routingStep
                                             ? <span className="typing-indicator">…</span>
-                                            : <ReactMarkdown
-                                                remarkPlugins={[remarkMath, remarkGfm]}
-                                                rehypePlugins={[rehypeKatex]}
-                                              >{msg.content}</ReactMarkdown>
+                                            : msg.content
+                                                ? <ReactMarkdown
+                                                    remarkPlugins={[remarkMath, remarkGfm]}
+                                                    rehypePlugins={[rehypeKatex]}
+                                                  >{msg.content}</ReactMarkdown>
+                                                : null
                                     ) : msg.content}
                                 </div>
                                 {msg.attribution && (
@@ -370,6 +409,70 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                 </div>
 
             </div>
+        </div>
+    );
+}
+
+// ── ThinkingPanel — shows Deep Think reasoning trace ─────────────────────────
+function ThinkingPanel({ thinking, done, streaming }) {
+    const [expanded, setExpanded] = useState(!done);
+    const bodyRef = useRef(null);
+
+    // Auto-expand while streaming; collapse when done
+    useEffect(() => {
+        if (!done) {
+            setExpanded(true);
+        } else {
+            setExpanded(false);
+        }
+    }, [done]);
+
+    // Auto-scroll thinking body as text arrives
+    useEffect(() => {
+        if (expanded && bodyRef.current) {
+            bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+        }
+    }, [thinking, expanded]);
+
+    const hasText = thinking.length > 0;
+
+    return (
+        <div className="thinking-panel">
+            <button className="thinking-header" onClick={() => setExpanded(e => !e)}>
+                {!done && <span className="thinking-pulse" />}
+                <span className="thinking-label">
+                    {done ? 'View reasoning' : 'Thinking…'}
+                </span>
+                {hasText && <span className="thinking-toggle">{expanded ? '▲' : '▼'}</span>}
+            </button>
+            {expanded && hasText && (
+                <div className="thinking-body" ref={bodyRef}>{thinking}</div>
+            )}
+        </div>
+    );
+}
+
+// ── RoutingStatusPanel — shows Routed mode MoA progress ──────────────────────
+const ROUTING_LABELS = {
+    classifying: { icon: '⚡', text: 'Routing your question…' },
+    gathering:   { icon: '🧠', text: null },   // text built dynamically from models
+    synthesising:{ icon: '✦', text: 'Synthesising responses…' },
+};
+
+function RoutingStatusPanel({ step, models, task }) {
+    const entry = ROUTING_LABELS[step];
+    if (!entry) return null;
+
+    const label = entry.text
+        || (models.length ? `Consulting ${models.join(' · ')}…` : 'Consulting models…');
+
+    return (
+        <div className="routing-status">
+            <span className="routing-icon">{entry.icon}</span>
+            <span className="routing-label">{label}</span>
+            {task && step === 'gathering' && (
+                <span className="routing-task-badge">{task}</span>
+            )}
         </div>
     );
 }

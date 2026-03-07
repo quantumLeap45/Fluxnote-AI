@@ -8,8 +8,11 @@ from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
 from app.models.chat import ChatRequest, ModelTier
-from app.services.ai_router import stream_chat_response
-from app.services.routed_llm import classify_task, gather_model_responses, stream_synthesis, build_attribution
+from app.services.ai_router import stream_chat_response, stream_chat_response_with_thinking
+from app.services.routed_llm import (
+    classify_task, gather_model_responses, stream_synthesis, build_attribution,
+    TASK_ROUTING, MODEL_DISPLAY_NAMES, MAX_ROUTED_MODELS,
+)
 import app.services.db as db
 
 router = APIRouter()
@@ -324,6 +327,8 @@ async def post_message(request: ChatRequest):
 
             # ── Model dispatch ────────────────────────────────────────────────
             if request.model == ModelTier.ROUTED:
+                # Show routing progress to the client before any model is called
+                yield "data: " + json.dumps({"type": "routing_status", "step": "classifying"}) + "\n\n"
                 task_type = await classify_task(user_content)
 
                 if task_type == "conversational":
@@ -352,7 +357,16 @@ async def post_message(request: ChatRequest):
                     }) + "\n\n"
 
                 else:
+                    selected = TASK_ROUTING.get(task_type, TASK_ROUTING["general"])[:MAX_ROUTED_MODELS]
+                    display_names = [MODEL_DISPLAY_NAMES.get(m, m) for m in selected]
+                    yield "data: " + json.dumps({
+                        "type": "routing_status", "step": "gathering",
+                        "models": display_names, "task": task_type,
+                    }) + "\n\n"
+
                     model_results = await gather_model_responses(messages, task_type)
+
+                    yield "data: " + json.dumps({"type": "routing_status", "step": "synthesising"}) + "\n\n"
 
                     async for chunk in stream_synthesis(model_results, task_type, messages):
                         chunks.append(chunk)
@@ -380,9 +394,19 @@ async def post_message(request: ChatRequest):
 
             else:
                 usage_out: dict = {}
-                async for chunk in stream_chat_response(messages, request.model, usage_out):
-                    chunks.append(chunk)
-                    yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
+
+                if request.model == ModelTier.DEEP_THINK:
+                    # Extended thinking — yields {type, text} dicts
+                    async for item in stream_chat_response_with_thinking(messages, usage_out):
+                        if item["type"] == "thinking":
+                            yield "data: " + json.dumps({"type": "thinking_chunk", "content": item["text"]}) + "\n\n"
+                        else:
+                            chunks.append(item["text"])
+                            yield "data: " + json.dumps({"type": "chunk", "content": item["text"]}) + "\n\n"
+                else:
+                    async for chunk in stream_chat_response(messages, request.model, usage_out):
+                        chunks.append(chunk)
+                        yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
                 await (
                     db.table("chat_messages")

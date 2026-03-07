@@ -132,7 +132,7 @@ export const deleteFile = async (fileId, sessionId) => {
 };
 
 // ── Chat ───────────────────────────────────────────────────────────────────
-export const streamChatMessage = async ({ message, model, fileIds, sessionId, assignmentsManifest, workspaceId, onChunk, onDone, onError }) => {
+export const streamChatMessage = async ({ message, model, fileIds, sessionId, assignmentsManifest, workspaceId, onChunk, onThinkingChunk, onRoutingStatus, onDone, onError }) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
     let res;
@@ -160,9 +160,11 @@ export const streamChatMessage = async ({ message, model, fileIds, sessionId, as
         if (!line.startsWith('data: ')) return;
         try {
             const data = JSON.parse(line.slice(6));
-            if (data.type === 'chunk') onChunk(data.content);
-            if (data.type === 'done')  onDone(data.routed ? { models_used: data.routed_simple ? null : data.models_used, total_tokens: data.total_tokens, simple: data.routed_simple } : (data.total_tokens > 0 ? { total_tokens: data.total_tokens } : null));
-            if (data.type === 'error') onError(data.message);
+            if (data.type === 'chunk')          onChunk(data.content);
+            if (data.type === 'thinking_chunk') onThinkingChunk?.(data.content);
+            if (data.type === 'routing_status') onRoutingStatus?.(data);
+            if (data.type === 'done')           onDone(data.routed ? { models_used: data.routed_simple ? null : data.models_used, total_tokens: data.total_tokens, simple: data.routed_simple } : (data.total_tokens > 0 ? { total_tokens: data.total_tokens } : null));
+            if (data.type === 'error')          onError(data.message);
         } catch { /* skip malformed lines */ }
     };
     while (true) {
