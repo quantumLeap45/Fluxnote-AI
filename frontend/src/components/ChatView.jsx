@@ -28,7 +28,7 @@ const MODEL_MAP = {
 const WELCOME_MSG = { id: 1, role: 'ai', content: "Hi! I'm Fluxnote — ask me anything: assignments, study help, writing, or general topics. I can see your dashboard, so just ask about your assignments anytime!", model: 'Fast' };
 
 function buildAssignmentsManifest(assignments) {
-    if (!assignments?.length) return null;
+    if (!assignments?.length) return '[STUDENT DASHBOARD — 0 assignments]\nNo assignments added yet.';
     const lines = assignments.map((a, i) => {
         const parts = [
             a.title || a.filename || 'Untitled',

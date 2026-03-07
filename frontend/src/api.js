@@ -140,7 +140,7 @@ export const streamChatMessage = async ({ message, model, fileIds, sessionId, as
         res = await fetch(`${API_BASE}/api/v1/chat/message`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, model, file_ids: fileIds, session_id: sessionId, assignments_manifest: assignmentsManifest || null, workspace_id: workspaceId || null }),
+            body: JSON.stringify({ message, model, file_ids: fileIds, session_id: sessionId, assignments_manifest: assignmentsManifest, workspace_id: workspaceId || null }),
             signal: controller.signal,
         });
     } catch (err) {
