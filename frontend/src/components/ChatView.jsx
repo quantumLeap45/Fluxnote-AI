@@ -42,17 +42,6 @@ function buildAssignmentsManifest(assignments) {
     return `[STUDENT DASHBOARD — ${assignments.length} assignment${assignments.length !== 1 ? 's' : ''}]\n${lines.join('\n')}`;
 }
 
-function detectAssignmentByMessage(text, assignments) {
-    if (!assignments?.length) return null;
-    const lower = text.toLowerCase();
-    const matches = assignments.filter(a => {
-        const title = (a.title || a.filename || '').toLowerCase();
-        const module = (a.module || '').toLowerCase();
-        return (title.length >= 5 && lower.includes(title)) ||
-               (module.length >= 3 && lower.includes(module));
-    });
-    return matches.length === 1 ? matches[0] : null;
-}
 
 function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache, assignments }) {
     const [selectedModel, setSelectedModel] = useState('Fast');
@@ -135,15 +124,6 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
             ].filter(Boolean).join('\n');
             apiMessage = `${inputText}\n\n[Assignment context — ${ctx.title || ctx.filename}]\n${parts}`;
             assignmentContextRef.current = null;
-        }
-
-        // Auto-inject file context when user explicitly mentions a specific assignment
-        // Only if no context is already set (don't override "Ask AI" flow)
-        if (!assignmentFileIdsRef.current.length) {
-            const matched = detectAssignmentByMessage(inputText, assignments);
-            if (matched) {
-                assignmentFileIdsRef.current = matched.file_ids || (matched.file_id ? [matched.file_id] : []);
-            }
         }
 
         const userMsg = { id: Date.now(), role: 'user', content: displayText };

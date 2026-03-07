@@ -69,12 +69,25 @@ _MANIFEST_ENTRY_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Common words too generic for title matching
+# Words too generic for title matching
 _STOP_WORDS = {
     'with', 'from', 'that', 'this', 'have', 'your', 'their', 'about',
-    'what', 'the', 'and', 'for', 'not', 'but', 'help', 'more', 'some',
+    'what', 'the', 'and', 'for', 'not', 'but', 'more', 'some',
     'tell', 'give', 'show', 'need', 'want', 'like', 'just', 'also',
     'can', 'will', 'how', 'when', 'where', 'which', 'its', 'our',
+}
+
+# Words that indicate the user wants to work with / understand an assignment
+_WORK_REQUEST_WORDS = {
+    'help', 'assist', 'explain', 'understand', 'summarize', 'summary',
+    'outline', 'write', 'draft', 'structure', 'format', 'detail', 'details',
+    'requirement', 'requirements', 'instruction', 'instructions',
+    'topic', 'topics', 'penalty', 'penalties', 'source', 'sources',
+    'citation', 'citations', 'word', 'count', 'submit', 'submission',
+    'marks', 'grade', 'grades', 'criteria', 'rubric', 'document',
+    'essay', 'report', 'project', 'paper', 'coursework', 'task',
+    'deadline', 'content', 'review', 'analyse', 'analyze', 'read',
+    'start', 'begin', 'approach', 'plan', 'prepare', 'study',
 }
 
 
@@ -83,7 +96,9 @@ def _match_assignment_id(message: str, manifest: str) -> str | None:
     Tiered assignment resolution against the dashboard manifest.
       Tier 1 — explicit UUID found in message
       Tier 2 — module code match (e.g. "COMP301", "ENG101")
-      Tier 3 — title keyword overlap (≥2 significant words, or 1 long word ≥8 chars)
+      Tier 3a — strong title overlap (≥2 words, long distinctive word, or all title words)
+      Tier 3b — weak title overlap (1 title word + work-request context signal)
+      Tier 4  — single-assignment fallback (only 1 assignment + work-request context)
     Returns the matched assignment_id string, or None.
     """
     lower = message.lower()
@@ -100,12 +115,15 @@ def _match_assignment_id(message: str, manifest: str) -> str | None:
     if not entries:
         return None
 
+    msg_words   = set(re.split(r'\W+', lower)) - {''}
+    has_context = bool(msg_words & _WORK_REQUEST_WORDS)
+
     # Tier 1 — explicit assignment ID in message
     for e in entries:
         if e['id'] in message:
             return e['id']
 
-    # Tier 2 — module code (min 3 chars)
+    # Tier 2 — module code (min 3 chars, e.g. "MKT101")
     for e in entries:
         mod = e['module']
         if mod and len(mod) >= 3 and mod in lower:
@@ -123,7 +141,12 @@ def _match_assignment_id(message: str, manifest: str) -> str | None:
         hits     = sum(1 for w in words if w in lower)
         long_hit = any(len(w) >= 8 and w in lower for w in words)
         all_hit  = hits == len(words) and len(words) >= 1
+
+        # Tier 3a — strong match: high confidence, no context required
         if hits >= 2 or long_hit or all_hit:
+            scored.append((hits + 10, e['id']))
+        # Tier 3b — weak match: 1 title word visible + message implies working on assignment
+        elif hits == 1 and has_context:
             scored.append((hits, e['id']))
 
     if len(scored) == 1:
@@ -132,6 +155,10 @@ def _match_assignment_id(message: str, manifest: str) -> str | None:
         scored.sort(key=lambda x: x[0], reverse=True)
         if scored[0][0] > scored[1][0]:   # unambiguous winner
             return scored[0][1]
+
+    # Tier 4 — single-assignment fallback: only 1 assignment and message implies working on it
+    if len(entries) == 1 and has_context:
+        return entries[0]['id']
 
     return None
 
@@ -191,6 +218,11 @@ async def resolve_assignment_context(
 
         # Fetch extracted document text
         file_ids = a.get('file_ids') or ([a['file_id']] if a.get('file_id') else [])
+        if isinstance(file_ids, str):
+            try:
+                file_ids = json.loads(file_ids)
+            except Exception:
+                file_ids = []
         if file_ids:
             files_resp = await (
                 db.table("files")
