@@ -25,9 +25,36 @@ const MODEL_MAP = {
     'Deep Think': 'Deep Think',
 };
 
-const WELCOME_MSG = { id: 1, role: 'ai', content: "Hi! I'm Fluxnote — ask me anything: assignments, study help, writing, or general topics. Upload a file or open an assignment card to get started.", model: 'Fast' };
+const WELCOME_MSG = { id: 1, role: 'ai', content: "Hi! I'm Fluxnote — ask me anything: assignments, study help, writing, or general topics. I can see your dashboard, so just ask about your assignments anytime!", model: 'Fast' };
 
-function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache }) {
+function buildAssignmentsManifest(assignments) {
+    if (!assignments?.length) return null;
+    const lines = assignments.map((a, i) => {
+        const parts = [
+            a.title || a.filename || 'Untitled',
+            a.module || 'No module',
+            `Due: ${a.due_date || 'Not stated'}`,
+            a.weightage || '',
+            a.assignment_type || '',
+        ].filter(Boolean);
+        return `#${i + 1} [id:${a.id}] ${parts.join(' | ')}`;
+    });
+    return `[STUDENT DASHBOARD — ${assignments.length} assignment${assignments.length !== 1 ? 's' : ''}]\n${lines.join('\n')}`;
+}
+
+function detectAssignmentByMessage(text, assignments) {
+    if (!assignments?.length) return null;
+    const lower = text.toLowerCase();
+    const matches = assignments.filter(a => {
+        const title = (a.title || a.filename || '').toLowerCase();
+        const module = (a.module || '').toLowerCase();
+        return (title.length >= 5 && lower.includes(title)) ||
+               (module.length >= 3 && lower.includes(module));
+    });
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache, assignments }) {
     const [selectedModel, setSelectedModel] = useState('Fast');
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [inputText, setInputText] = useState('');
@@ -110,6 +137,15 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
             assignmentContextRef.current = null;
         }
 
+        // Auto-inject file context when user explicitly mentions a specific assignment
+        // Only if no context is already set (don't override "Ask AI" flow)
+        if (!assignmentFileIdsRef.current.length) {
+            const matched = detectAssignmentByMessage(inputText, assignments);
+            if (matched) {
+                assignmentFileIdsRef.current = matched.file_ids || (matched.file_id ? [matched.file_id] : []);
+            }
+        }
+
         const userMsg = { id: Date.now(), role: 'user', content: displayText };
         setMessages(prev => [...prev, userMsg]);
         setInputText('');
@@ -125,6 +161,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
             model: selectedModel,
             fileIds: [...assignmentFileIdsRef.current, ...files.map(f => f.id)],
             sessionId,
+            assignmentsManifest: buildAssignmentsManifest(assignments),
             onChunk: (chunk) => {
                 setMessages(prev => prev.map(m =>
                     m.id === aiMsgId ? { ...m, content: m.content + chunk } : m

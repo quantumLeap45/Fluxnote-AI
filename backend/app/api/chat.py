@@ -94,7 +94,10 @@ async def post_message(request: ChatRequest):
                 file_context += f"\n\n[File: {file['name']}]\n{file['content'][:per_file_limit]}"
 
     # 3. Build messages list
-    messages: list[dict] = [{"role": "system", "content": STUDENT_SYSTEM_PROMPT}]
+    system_content = STUDENT_SYSTEM_PROMPT
+    if request.assignments_manifest:
+        system_content += f"\n\n---\n{request.assignments_manifest}"
+    messages: list[dict] = [{"role": "system", "content": system_content}]
     messages += [
         {"role": row["role"], "content": row["content"]}
         for row in history

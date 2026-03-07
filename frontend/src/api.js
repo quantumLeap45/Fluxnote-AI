@@ -132,7 +132,7 @@ export const deleteFile = async (fileId, sessionId) => {
 };
 
 // ── Chat ───────────────────────────────────────────────────────────────────
-export const streamChatMessage = async ({ message, model, fileIds, sessionId, onChunk, onDone, onError }) => {
+export const streamChatMessage = async ({ message, model, fileIds, sessionId, assignmentsManifest, onChunk, onDone, onError }) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
     let res;
@@ -140,7 +140,7 @@ export const streamChatMessage = async ({ message, model, fileIds, sessionId, on
         res = await fetch(`${API_BASE}/api/v1/chat/message`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, model, file_ids: fileIds, session_id: sessionId }),
+            body: JSON.stringify({ message, model, file_ids: fileIds, session_id: sessionId, assignments_manifest: assignmentsManifest || null }),
             signal: controller.signal,
         });
     } catch (err) {

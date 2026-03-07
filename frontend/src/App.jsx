@@ -118,6 +118,7 @@ function App() {
                         onContextConsumed={() => setChatContext(null)}
                         onFirstMessage={handleFirstMessage}
                         historyCache={historyCacheRef.current}
+                        assignments={assignments}
                     />
                 )}
                 {activeTab === 'dashboard' && (

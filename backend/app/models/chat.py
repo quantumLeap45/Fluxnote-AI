@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     model: ModelTier = ModelTier.FAST
     file_ids: List[str] = []
     session_id: str
+    assignments_manifest: Optional[str] = None
 
 
 class Message(BaseModel):
