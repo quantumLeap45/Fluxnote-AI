@@ -138,6 +138,7 @@ async def stream_chat_response_with_thinking(
                         delta.get("reasoning_details")
                         or delta.get("reasoning")
                         or delta.get("thinking")
+                        or delta.get("reasoning_content")   # DeepSeek V3.2
                     )
                     if raw_reasoning:
                         if isinstance(raw_reasoning, list):

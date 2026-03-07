@@ -14,10 +14,11 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
     # Model mapping — maps UI labels to OpenRouter model IDs
-    MODEL_FAST: str = "google/gemini-3.1-flash-lite-preview"
+    MODEL_FAST: str = "inception/mercury-2"
     MODEL_BALANCED: str = "openai/gpt-5-nano"
-    MODEL_DEEP_THINK: str = "anthropic/claude-haiku-4.5"
-    MODEL_VISION: str = "anthropic/claude-haiku-4.5"
+    MODEL_DEEP_THINK: str = "deepseek/deepseek-v3.2"
+    MODEL_DEEP_THINK_SECONDARY: str = "google/gemini-3.1-flash-lite-preview"
+    MODEL_VISION: str = "google/gemini-3.1-flash-lite-preview"
 
     # Supabase
     SUPABASE_URL: str = ""
