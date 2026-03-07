@@ -139,7 +139,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
         const isRouted    = selectedModel === 'Routed';
         const aiMsg = {
             id: aiMsgId, role: 'ai', content: '', model: selectedModel, attribution: null,
-            ...(isDeepThink && { thinking: '', thinkingDone: false }),
+            ...(isDeepThink && { thinking: '', thinkingDone: false, routingStep: null, routingModels: [] }),
             ...(isRouted    && { routingStep: 'classifying', routingModels: [], routingTask: null }),
         };
         setMessages(prev => [...prev, aiMsg]);
@@ -306,8 +306,8 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                                         task={msg.routingTask}
                                     />
                                 )}
-                                {/* Thinking panel — Deep Think only */}
-                                {msg.thinking !== undefined && (
+                                {/* Thinking panel — Deep Think only (single-model path; hidden during escalated routing) */}
+                                {msg.thinking !== undefined && !msg.routingStep && (
                                     <ThinkingPanel
                                         thinking={msg.thinking || ''}
                                         done={msg.thinkingDone}
