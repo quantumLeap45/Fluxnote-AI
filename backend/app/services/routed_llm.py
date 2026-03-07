@@ -5,7 +5,7 @@ Flow:
   1. Classify task type (keyword matching → LLM fallback)
   2. Select up to MAX_ROUTED_MODELS models based on task strengths
   3. Call all selected models in parallel (asyncio.gather)
-  4. Synthesize using the strongest model (Claude Haiku) — streamed
+  4. Synthesize using DeepSeek V3.2 — streamed
   5. Return attribution metadata (which models, total tokens)
 """
 
@@ -21,9 +21,10 @@ MAX_ROUTED_MODELS = 3  # Hard cap — never call more than 3 models at once
 
 # Display names for attribution footer
 MODEL_DISPLAY_NAMES: dict[str, str] = {
-    "anthropic/claude-haiku-4.5":           "Claude",
+    "inception/mercury-2":                  "Mercury",
     "openai/gpt-5-nano":                    "GPT-5",
     "google/gemini-3.1-flash-lite-preview": "Gemini",
+    "deepseek/deepseek-v3.2":              "DeepSeek",
 }
 
 # ── Task routing rules ───────────────────────────────────────────────────────
@@ -32,11 +33,11 @@ MODEL_DISPLAY_NAMES: dict[str, str] = {
 # and MODEL_DISPLAY_NAMES above; nothing else changes.
 TASK_ROUTING: dict[str, list[str]] = {
     "code":     [
-        "anthropic/claude-haiku-4.5",           # strong at logic/debugging
+        "deepseek/deepseek-v3.2",               # strong at logic/debugging
         "openai/gpt-5-nano",                    # strong at code generation
     ],
     "math":     [
-        "anthropic/claude-haiku-4.5",           # strong at step-by-step reasoning
+        "deepseek/deepseek-v3.2",               # strong at step-by-step reasoning
         "openai/gpt-5-nano",                    # strong at numeric accuracy
     ],
     "creative": [
@@ -45,19 +46,19 @@ TASK_ROUTING: dict[str, list[str]] = {
     ],
     "writing":  [
         "openai/gpt-5-nano",                    # strong at professional tone
-        "anthropic/claude-haiku-4.5",           # strong at polish/clarity
+        "deepseek/deepseek-v3.2",               # strong at polish/clarity
     ],
     "factual":  [
         "google/gemini-3.1-flash-lite-preview", # strong at grounded facts
         "openai/gpt-5-nano",                    # cross-check verification
     ],
     "analysis": [
-        "anthropic/claude-haiku-4.5",           # strong at deep reasoning
+        "deepseek/deepseek-v3.2",               # strong at deep reasoning
         "openai/gpt-5-nano",                    # strong at structured output
         "google/gemini-3.1-flash-lite-preview", # strong at breadth
     ],
     "general":  [
-        "anthropic/claude-haiku-4.5",
+        "deepseek/deepseek-v3.2",
         "openai/gpt-5-nano",
         "google/gemini-3.1-flash-lite-preview",
     ],
@@ -146,6 +147,7 @@ async def _call_model_complete(
     messages: list[dict],
     model_id: str,
     headers: dict,
+    timeout: int = 45,
 ) -> dict:
     """
     Call a single model (non-streaming) and return its full response.
@@ -157,7 +159,7 @@ async def _call_model_complete(
         "max_tokens": 1024,
         "stream": False,
     }
-    async with httpx.AsyncClient(timeout=45) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(
             f"{settings.OPENROUTER_BASE_URL}/chat/completions",
             headers=headers,
@@ -195,6 +197,44 @@ async def gather_model_responses(
     return valid
 
 
+# ── Deep Think escalation ─────────────────────────────────────────────────────
+
+_DT_LIST_TRIGGERS = [
+    "list all", "every ", "all topics", "all options", "all requirements",
+    "all constraints", "all penalties", "submission rules", "full list", "complete list",
+]
+_DT_VERIFY_TRIGGERS = [
+    "verify", "double check", "double-check", "confirm all",
+    "make sure", "did i miss", "are there any",
+]
+_DT_REASONING_TRIGGERS = [
+    "step by step", "step-by-step", "prove ", "derive ",
+    "differentiate", "multi-step", "solve for",
+]
+
+
+def should_escalate_deep_think(message: str, user_content: str) -> bool:
+    """Return True if Deep Think should use the dual-model escalated path."""
+    lower_msg = message.lower()
+    heavy_context = len(user_content) > len(message) + 3000
+    list_hit      = any(t in lower_msg for t in _DT_LIST_TRIGGERS)
+    verify_hit    = any(t in lower_msg for t in _DT_VERIFY_TRIGGERS)
+    reasoning_hit = any(t in lower_msg for t in _DT_REASONING_TRIGGERS)
+    return heavy_context or list_hit or verify_hit or reasoning_hit
+
+
+async def gather_deep_think_responses(messages: list[dict]) -> list[dict]:
+    """Parallel call: DeepSeek V3.2 + Gemini for Deep Think escalated path. 20s timeout each."""
+    headers = _openrouter_headers()
+    models = [settings.MODEL_DEEP_THINK, settings.MODEL_DEEP_THINK_SECONDARY]
+    tasks = [_call_model_complete(messages, m, headers, timeout=20) for m in models]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    valid = [r for r in results if isinstance(r, dict)]
+    if not valid:
+        raise RuntimeError("All Deep Think model calls failed during escalation")
+    return valid
+
+
 # ── Synthesis ────────────────────────────────────────────────────────────────
 
 _SYNTHESIS_SYSTEM = (
@@ -215,7 +255,7 @@ async def stream_synthesis(
 ):
     """
     Async generator — streams the synthesis response chunk by chunk.
-    Uses the strongest model in our pool (Deep Think / Claude Haiku) as synthesizer.
+    Uses DeepSeek V3.2 as synthesizer.
     """
     perspectives = "\n\n".join(
         f"[Perspective {i + 1} — {r['display_name']}]:\n{r['content']}"

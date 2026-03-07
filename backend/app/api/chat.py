@@ -7,11 +7,13 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 
+from app.config import settings
 from app.models.chat import ChatRequest, ModelTier
 from app.services.ai_router import stream_chat_response, stream_chat_response_with_thinking
 from app.services.routed_llm import (
     classify_task, gather_model_responses, stream_synthesis, build_attribution,
     TASK_ROUTING, MODEL_DISPLAY_NAMES, MAX_ROUTED_MODELS,
+    should_escalate_deep_think, gather_deep_think_responses,
 )
 import app.services.db as db
 
@@ -392,11 +394,47 @@ async def post_message(request: ChatRequest):
                         "total_tokens": attribution["total_tokens"],
                     }) + "\n\n"
 
+            elif request.model == ModelTier.DEEP_THINK and should_escalate_deep_think(request.message, user_content):
+                # ── Deep Think escalated: parallel DeepSeek + Gemini ──────────
+                dt_models = [settings.MODEL_DEEP_THINK, settings.MODEL_DEEP_THINK_SECONDARY]
+                display_names = [MODEL_DISPLAY_NAMES.get(m, m) for m in dt_models]
+                yield "data: " + json.dumps({
+                    "type": "routing_status", "step": "gathering", "models": display_names
+                }) + "\n\n"
+
+                dt_results = await gather_deep_think_responses(messages)
+
+                yield "data: " + json.dumps({"type": "routing_status", "step": "synthesising"}) + "\n\n"
+
+                async for chunk in stream_synthesis(dt_results, "analysis", messages):
+                    chunks.append(chunk)
+                    yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
+
+                attribution = build_attribution(dt_results)
+                await (
+                    db.table("chat_messages")
+                    .insert({
+                        "id":         str(uuid.uuid4()),
+                        "session_id": request.session_id,
+                        "role":       "assistant",
+                        "content":    "".join(chunks),
+                        "model":      request.model.value,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                    .execute()
+                )
+                yield "data: " + json.dumps({
+                    "type":         "done",
+                    "routed":       True,
+                    "models_used":  attribution["models_used"],
+                    "total_tokens": attribution["total_tokens"],
+                }) + "\n\n"
+
             else:
                 usage_out: dict = {}
 
                 if request.model == ModelTier.DEEP_THINK:
-                    # Extended thinking — yields {type, text} dicts
+                    # Default Deep Think: DeepSeek V3.2 alone with thinking panel
                     async for item in stream_chat_response_with_thinking(messages, usage_out):
                         if item["type"] == "thinking":
                             yield "data: " + json.dumps({"type": "thinking_chunk", "content": item["text"]}) + "\n\n"
