@@ -334,7 +334,7 @@ async def post_message(request: ChatRequest):
             if request.model == ModelTier.ROUTED:
                 # Show routing progress to the client before any model is called
                 yield "data: " + json.dumps({"type": "routing_status", "step": "classifying"}) + "\n\n"
-                task_type = await classify_task(user_content)
+                task_type = await classify_task(request.message)
 
                 if task_type == "conversational":
                     usage_out_conv: dict = {}
