@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, AlertCircle, Trash2 } from 'lucide-react';
 import { getAssignment, retryAssignment } from '../api';
 import './AssignmentCard.css';
@@ -10,27 +10,38 @@ const SUBSTATUS = [
     'Preparing review view…',
 ];
 
-const POLL_INTERVAL = 3000;
+const POLL_BASE_MS   = 3000;   // start at 3s
+const POLL_MAX_MS    = 30000;  // cap at 30s
+const POLL_BACKOFF   = 1.5;    // multiply interval by this on each poll
 
 function AssignmentCard({ assignment: initial, sessionId, onClick, onDelete, onCardUpdate }) {
     const [card, setCard] = useState(initial);
     const [substatusIdx, setSubstatusIdx] = useState(0);
+    const pollIntervalRef = useRef(POLL_BASE_MS);
 
     const isActive = card.processing_state === 'queued' || card.processing_state === 'processing';
 
-    // Poll until ready/failed
+    // Poll with exponential backoff until ready/failed
     useEffect(() => {
-        if (!isActive) return;
-        const timer = setInterval(async () => {
+        if (!isActive) {
+            pollIntervalRef.current = POLL_BASE_MS;  // reset for next time
+            return;
+        }
+        let timeoutId;
+        const poll = async () => {
             try {
                 const updated = await getAssignment(card.id, sessionId);
                 if (updated.processing_state !== card.processing_state) {
                     onCardUpdate?.(updated);
                 }
                 setCard(updated);
-            } catch { /* silent */ }
-        }, POLL_INTERVAL);
-        return () => clearInterval(timer);
+            } catch { /* silent — will retry */ }
+            // Schedule next poll only if still active
+            pollIntervalRef.current = Math.min(pollIntervalRef.current * POLL_BACKOFF, POLL_MAX_MS);
+            timeoutId = setTimeout(poll, pollIntervalRef.current);
+        };
+        timeoutId = setTimeout(poll, POLL_BASE_MS);
+        return () => clearTimeout(timeoutId);
     }, [isActive, card.id, card.processing_state, sessionId, onCardUpdate]);
 
     // Rotate substatus text while processing
