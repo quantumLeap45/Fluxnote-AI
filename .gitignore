@@ -59,3 +59,4 @@ Thumbs.db
 uploads/
 .vercel
 .env*.local
+.worktrees/
