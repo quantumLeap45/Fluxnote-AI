@@ -3,7 +3,7 @@ import KanbanBoard from './KanbanBoard';
 import AssignmentDetail from './AssignmentDetail';
 import './DashboardView.css';
 
-function DashboardView({ workspaceId, assignments, onAskAI, onAssignmentUpdate, onDeleteCard, onCardCreated }) {
+function DashboardView({ workspaceId, assignments, fetchError, onRetryFetch, onAskAI, onAssignmentUpdate, onDeleteCard, onCardCreated }) {
     const [selectedCard, setSelectedCard] = useState(null);
 
     const handleDeleteCard = async (cardId) => {
@@ -19,6 +19,13 @@ function DashboardView({ workspaceId, assignments, onAskAI, onAssignmentUpdate, 
                     <p className="dashboard-subtitle">Drag cards across columns to track your progress.</p>
                 </div>
             </header>
+
+            {fetchError && (
+                <div style={{ padding: '12px 16px', marginBottom: '12px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span>Failed to load assignments.</span>
+                    <button onClick={onRetryFetch} style={{ marginLeft: 'auto', padding: '4px 12px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}>Retry</button>
+                </div>
+            )}
 
             <KanbanBoard
                 assignments={assignments}
@@ -38,6 +45,7 @@ function DashboardView({ workspaceId, assignments, onAskAI, onAssignmentUpdate, 
                         setSelectedCard(null);
                         onAskAI(card);
                     }}
+                    onAssignmentUpdate={onAssignmentUpdate}
                 />
             )}
         </div>

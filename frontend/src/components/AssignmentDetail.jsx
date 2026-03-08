@@ -4,7 +4,7 @@ import { X, MessageSquare, CheckSquare, Square, Sparkles, RefreshCw } from 'luci
 import './AssignmentDetail.css';
 import { reExtractAssignment } from '../api';
 
-function AssignmentDetail({ assignment: initial, sessionId, onClose, onAskAI }) {
+function AssignmentDetail({ assignment: initial, sessionId, onClose, onAskAI, onAssignmentUpdate }) {
     const [localCard, setLocalCard] = useState(initial);
     const checklistKey = `fluxnote_checklist_${initial.id}`;
     const [checkedItems, setCheckedItems] = useState(() => {
@@ -38,10 +38,12 @@ function AssignmentDetail({ assignment: initial, sessionId, onClose, onAskAI }) 
         try {
             const updated = await reExtractAssignment(localCard.id, sessionId);
             setLocalCard(updated);
+            onAssignmentUpdate?.(updated);
             localStorage.setItem(dismissKey, 'true');
             setShowBanner(false);
         } catch (err) {
             console.error('Re-extraction failed:', err);
+            alert('Failed to refresh analysis. Please try again.');
         } finally {
             setReExtracting(false);
         }

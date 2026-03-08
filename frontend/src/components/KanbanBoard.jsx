@@ -10,7 +10,7 @@ import './KanbanBoard.css';
 
 const COLUMNS = ['todo', 'doing', 'done'];
 
-function DraggableCard({ assignment, sessionId, onCardClick, onDeleteCard }) {
+function DraggableCard({ assignment, sessionId, onCardClick, onDeleteCard, onCardUpdate }) {
     const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
         id: assignment.id,
         data: { column: assignment.kanban_column || 'todo' },
@@ -27,6 +27,7 @@ function DraggableCard({ assignment, sessionId, onCardClick, onDeleteCard }) {
                 sessionId={sessionId}
                 onClick={onCardClick}
                 onDelete={onDeleteCard}
+                onCardUpdate={onCardUpdate}
             />
         </div>
     );
@@ -101,6 +102,7 @@ function KanbanBoard({ assignments, sessionId, onCardClick, onAssignmentUpdate, 
                                 sessionId={sessionId}
                                 onCardClick={onCardClick}
                                 onDeleteCard={onDeleteCard}
+                                onCardUpdate={onAssignmentUpdate}
                             />
                         ))}
                     </KanbanColumn>

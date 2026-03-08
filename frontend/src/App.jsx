@@ -16,21 +16,25 @@ import {
 } from './api';
 
 function App() {
-    const [activeChatId, setActiveChatId]   = useState(() => getSessionId());
-    const [workspaceId]                     = useState(() => getWorkspaceId());
-    const [chats, setChats]                 = useState(() => getStoredChats());
-    const [activeTab, setActiveTab]         = useState('chat');
-    const [chatContext, setChatContext]     = useState(null);
-    const [assignments, setAssignments]     = useState([]);
-    const historyCacheRef                   = useRef(new Map());
+    const [activeChatId, setActiveChatId]     = useState(() => getSessionId());
+    const [workspaceId]                       = useState(() => getWorkspaceId());
+    const [chats, setChats]                   = useState(() => getStoredChats());
+    const [activeTab, setActiveTab]           = useState('chat');
+    const [chatContext, setChatContext]       = useState(null);
+    const [assignments, setAssignments]       = useState([]);
+    const [assignmentFetchError, setAssignmentFetchError] = useState(false);
+    const historyCacheRef                     = useRef(new Map());
 
     const refreshChats = useCallback(() => setChats(getStoredChats()), []);
 
     // Fetch assignments once — persists across tab switches
     useEffect(() => {
         listAssignments(workspaceId)
-            .then(data => setAssignments(data.assignments || []))
-            .catch(() => {});
+            .then(data => {
+                setAssignments(data.assignments || []);
+                setAssignmentFetchError(false);
+            })
+            .catch(() => setAssignmentFetchError(true));
     }, [workspaceId]);
 
     const handleNewChat = useCallback(() => {
@@ -79,7 +83,9 @@ function App() {
         try {
             await deleteAssignment(cardId, workspaceId);
             setAssignments(prev => prev.filter(a => a.id !== cardId));
-        } catch { /* silent */ }
+        } catch {
+            alert('Failed to delete assignment. Please try again.');
+        }
     }, [workspaceId]);
 
     const handleCardCreated = useCallback((card) => {
@@ -125,6 +131,13 @@ function App() {
                     <DashboardView
                         workspaceId={workspaceId}
                         assignments={assignments}
+                        fetchError={assignmentFetchError}
+                        onRetryFetch={() => {
+                            setAssignmentFetchError(false);
+                            listAssignments(workspaceId)
+                                .then(data => setAssignments(data.assignments || []))
+                                .catch(() => setAssignmentFetchError(true));
+                        }}
                         onAskAI={openChatWithContext}
                         onAssignmentUpdate={handleAssignmentUpdate}
                         onDeleteCard={handleDeleteCard}

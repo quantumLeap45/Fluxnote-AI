@@ -12,7 +12,7 @@ const SUBSTATUS = [
 
 const POLL_INTERVAL = 3000;
 
-function AssignmentCard({ assignment: initial, sessionId, onClick, onDelete }) {
+function AssignmentCard({ assignment: initial, sessionId, onClick, onDelete, onCardUpdate }) {
     const [card, setCard] = useState(initial);
     const [substatusIdx, setSubstatusIdx] = useState(0);
 
@@ -24,11 +24,14 @@ function AssignmentCard({ assignment: initial, sessionId, onClick, onDelete }) {
         const timer = setInterval(async () => {
             try {
                 const updated = await getAssignment(card.id, sessionId);
+                if (updated.processing_state !== card.processing_state) {
+                    onCardUpdate?.(updated);
+                }
                 setCard(updated);
             } catch { /* silent */ }
         }, POLL_INTERVAL);
         return () => clearInterval(timer);
-    }, [isActive, card.id, sessionId]);
+    }, [isActive, card.id, card.processing_state, sessionId, onCardUpdate]);
 
     // Rotate substatus text while processing
     useEffect(() => {
