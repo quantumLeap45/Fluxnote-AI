@@ -232,8 +232,13 @@ export const deleteAssignment = async (assignmentId, sessionId) => {
     return res.json();
 };
 
-export const retryAssignment = (assignmentId, sessionId) =>
-    updateAssignment(assignmentId, { processing_state: 'queued' }, sessionId);
+export const retryAssignment = async (assignmentId, sessionId) => {
+    const res = await fetch(`${API_BASE}/api/v1/assignments/${assignmentId}/retry?session_id=${sessionId}`, {
+        method: 'POST',
+    });
+    if (!res.ok) throw new Error((await res.json()).detail || 'Retry failed');
+    return res.json();
+};
 
 export const reExtractAssignment = async (assignmentId, sessionId) => {
     const res = await fetch(`${API_BASE}/api/v1/assignments/${assignmentId}/re-extract?session_id=${sessionId}`, {

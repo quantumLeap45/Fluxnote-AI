@@ -13,6 +13,7 @@ import {
     renameChatTitle,
     listAssignments,
     deleteAssignment,
+    clearChatHistory,
 } from './api';
 
 function App() {
@@ -52,7 +53,7 @@ function App() {
         setChatContext(null);
     }, []);
 
-    const handleDeleteChat = useCallback((id) => {
+    const handleDeleteChat = useCallback(async (id) => {
         removeStoredChat(id);
         refreshChats();
         if (id === activeChatId) {
@@ -63,6 +64,8 @@ function App() {
                 handleNewChat();
             }
         }
+        // Best-effort: delete backend messages (fire-and-forget, UI already updated)
+        clearChatHistory(id).catch(() => {});
     }, [activeChatId, refreshChats, handleSelectChat, handleNewChat]);
 
     const handleFirstMessage = useCallback((id, message) => {

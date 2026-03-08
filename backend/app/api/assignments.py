@@ -196,6 +196,12 @@ async def delete_assignment(assignment_id: str, session_id: str = Query(...)):
     return {"success": True}
 
 
+@router.post("/{assignment_id}/retry")
+async def retry_assignment(assignment_id: str, session_id: str = Query(...)):
+    """Retry extraction on a failed card — delegates to re-extract logic."""
+    return await re_extract_assignment(assignment_id, session_id)
+
+
 @router.post("/{assignment_id}/re-extract")
 async def re_extract_assignment(assignment_id: str, session_id: str = Query(...)):
     """Re-run AI extraction on an existing card using the latest prompt."""

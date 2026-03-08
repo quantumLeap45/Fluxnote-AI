@@ -196,8 +196,10 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
 
     const handleFileUpload = async (e) => {
         const selectedFiles = Array.from(e.target.files);
+        // Snapshot count at loop start — files state is stale inside an async loop
+        let uploadedCount = files.length;
         for (const file of selectedFiles) {
-            if (files.length >= 5) break;
+            if (uploadedCount >= 5) break;
             setUploading(true);
             try {
                 let result;
@@ -208,6 +210,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                     result = await uploadFile(file, sessionId);
                 }
                 setFiles(prev => [...prev, { ...result, addedToDashboard: false }]);
+                uploadedCount++;
             } catch (err) {
                 setError(`Upload failed: ${err.message}`);
             } finally {

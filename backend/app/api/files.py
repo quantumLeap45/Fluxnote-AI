@@ -95,6 +95,20 @@ async def upload_file(
 @router.post("/process", response_model=FileUploadResponse)
 async def process_storage_file(body: StorageProcessRequest):
     """Download a file from Supabase Storage, parse it, and save to the files table."""
+    # Enforce per-session file limit (same as /upload)
+    count_resp = await (
+        db.table("files")
+        .select("id", count="exact")
+        .eq("session_id", body.session_id)
+        .execute()
+    )
+    current_count = count_resp.count if count_resp.count is not None else len(count_resp.data)
+    if current_count >= settings.MAX_FILES_PER_SESSION:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Session has reached the maximum of {settings.MAX_FILES_PER_SESSION} files.",
+        )
+
     content = await storage.download_from_storage(body.storage_path)
 
     max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
