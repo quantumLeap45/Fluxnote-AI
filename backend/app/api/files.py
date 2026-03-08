@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -167,5 +168,33 @@ async def list_files(session_id: str = Query(...)):
 
 @router.delete("/{file_id}")
 async def delete_file(file_id: str, session_id: str = Query(...)):
+    # Cascade: remove this file_id from any assignments that reference it before deleting
+    assignments_resp = await (
+        db.table("assignments")
+        .select("id, file_id, file_ids")
+        .eq("session_id", session_id)
+        .execute()
+    )
+    for a in (assignments_resp.data or []):
+        updates: dict = {}
+        if a.get("file_id") == file_id:
+            updates["file_id"] = None
+        existing_ids = a.get("file_ids") or []
+        if isinstance(existing_ids, str):
+            try:
+                existing_ids = json.loads(existing_ids)
+            except Exception:
+                existing_ids = []
+        if file_id in existing_ids:
+            updates["file_ids"] = [fid for fid in existing_ids if fid != file_id]
+        if updates:
+            await (
+                db.table("assignments")
+                .update(updates)
+                .eq("id", a["id"])
+                .eq("session_id", session_id)
+                .execute()
+            )
+
     await db.table("files").delete().eq("id", file_id).eq("session_id", session_id).execute()
     return {"success": True}

@@ -40,6 +40,7 @@ function App() {
     const handleNewChat = useCallback(() => {
         const newId = createNewChatSession();
         setActiveChatId(newId);
+        setChats(getStoredChats());
         setActiveTab('chat');
         setChatContext(null);
     }, []);
