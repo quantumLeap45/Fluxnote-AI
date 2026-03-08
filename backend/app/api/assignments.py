@@ -109,6 +109,20 @@ async def create_assignment(body: AssignmentCreate):
         )
         raise HTTPException(status_code=504, detail="AI extraction timed out — please retry")
 
+    except ValueError as exc:
+        # Malformed JSON from AI — distinct from timeout or API errors
+        await (
+            db.table("assignments")
+            .update({
+                "processing_state": ProcessingState.FAILED.value,
+                "error_message":    str(exc)[:500],
+                "updated_at":       datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", assignment_id)
+            .execute()
+        )
+        raise HTTPException(status_code=422, detail=str(exc))
+
     except Exception as exc:
         await (
             db.table("assignments")
@@ -270,6 +284,19 @@ async def re_extract_assignment(assignment_id: str, session_id: str = Query(...)
             .execute()
         )
         raise HTTPException(status_code=504, detail="AI re-extraction timed out — please retry")
+
+    except ValueError as exc:
+        await (
+            db.table("assignments")
+            .update({
+                "processing_state": ProcessingState.FAILED.value,
+                "error_message": str(exc)[:500],
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", assignment_id)
+            .execute()
+        )
+        raise HTTPException(status_code=422, detail=str(exc))
 
     except Exception as exc:
         await (
