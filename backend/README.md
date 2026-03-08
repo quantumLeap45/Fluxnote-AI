@@ -12,7 +12,7 @@ FastAPI backend for the Fluxnote AI workspace. Provides AI chat (via OpenRouter)
 | Database | Supabase (PostgreSQL) |
 | AI Models | OpenRouter (multi-model routing) |
 | Streaming | Server-Sent Events (SSE) |
-| Deployment | Railway (primary) / Vercel (alternative) |
+| Deployment | Vercel (serverless, maxDuration=60s) |
 
 ---
 
@@ -128,13 +128,19 @@ Returns: `text/event-stream` SSE with events:
 
 ## AI Model Tiers
 
-| UI Label | OpenRouter Model (default) | Characteristics |
-|---|---|---|
-| Fast | mistralai/mistral-7b-instruct:free | Quick responses, good for simple tasks |
-| Balanced | google/gemma-2-9b-it:free | Better reasoning, moderate speed |
-| Deep Think | deepseek/deepseek-r1-distill-llama-70b:free | Best reasoning, slower |
+| Config Key | UI Label | OpenRouter Model ID | Role |
+|---|---|---|---|
+| `MODEL_FAST` | Fast | `inception/mercury-2` | Conversational replies, assignment extraction, routing classification |
+| `MODEL_BALANCED` | Balanced | `openai/gpt-5-nano` | General-purpose moderate-cost responses |
+| `MODEL_DEEP_THINK` | Deep Think | `deepseek/deepseek-v3.2` | Reasoning-heavy tasks; also synthesis model for Routed MoA |
+| `MODEL_DEEP_THINK_SECONDARY` | — (escalation only) | `google/gemini-3.1-flash-lite-preview` | Second proposer in Deep Think escalated path |
+| `MODEL_VISION` | — (internal) | `google/gemini-3.1-flash-lite-preview` | OCR / image extraction |
 
-To swap models: update `MODEL_FAST`, `MODEL_BALANCED`, `MODEL_DEEP_THINK` in your `.env`.
+**Routing modes:**
+- **Fast / Balanced / Deep Think** — single-model; override `MODEL_FAST` / `MODEL_BALANCED` / `MODEL_DEEP_THINK` in `.env`
+- **Routed** — Mixture of Agents: classifies task → parallel proposers → DeepSeek synthesis
+
+To swap any model: update the corresponding key in your `.env`.
 
 ---
 
