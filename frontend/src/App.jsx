@@ -64,8 +64,10 @@ function App() {
                 handleNewChat();
             }
         }
-        // Best-effort: delete backend messages (fire-and-forget, UI already updated)
-        clearChatHistory(id).catch(() => {});
+        // Best-effort: delete backend messages. UI already updated; show notice on failure.
+        clearChatHistory(id).catch(() => {
+            alert('Chat removed locally. Could not clear server history — some messages may remain.');
+        });
     }, [activeChatId, refreshChats, handleSelectChat, handleNewChat]);
 
     const handleFirstMessage = useCallback((id, message) => {
