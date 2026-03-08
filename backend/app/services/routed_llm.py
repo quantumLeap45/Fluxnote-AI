@@ -104,9 +104,13 @@ def _word_match(keywords: list[str], text: str) -> bool:
     Return True if any keyword from the list matches as a complete token in text.
 
     Single-word keywords use \\b word-boundary anchors to prevent substring false
-    positives (e.g. "code" in "code of conduct" must not match the code route).
+    positives (e.g. 'api' inside 'capital', 'class' inside 'classical',
+    'bug' inside 'debugging').
     Multi-word phrases (e.g. "cover letter") use substring matching since they
     are inherently unambiguous.
+
+    Note: whole-word polysemy (e.g. 'code' in 'code of conduct') is a known
+    semantic limitation that word-boundary matching does not address.
     """
     for kw in keywords:
         if " " in kw:
@@ -114,7 +118,7 @@ def _word_match(keywords: list[str], text: str) -> bool:
             if kw in text:
                 return True
         else:
-            # Single word — require word boundary
+            # Single word — require word boundary to avoid substring FPs
             if re.search(r"\b" + re.escape(kw) + r"\b", text):
                 return True
     return False
@@ -123,15 +127,11 @@ def _word_match(keywords: list[str], text: str) -> bool:
 def _quick_classify(message: str) -> str | None:
     """
     Keyword-based classification — avoids an extra API call for common cases.
-    Uses word-boundary matching to prevent false positives from document content
-    (e.g. "code of conduct" must not route as a coding task).
+    Uses _word_match() for word-boundary-aware keyword scoring.
     """
     lower = message.lower()
     scores = {
-        task: sum(
-            1 for kw in kws
-            if (kw in lower if " " in kw else re.search(r"\b" + re.escape(kw) + r"\b", lower))
-        )
+        task: sum(1 for kw in kws if _word_match([kw], lower))
         for task, kws in _KEYWORD_MAP.items()
     }
     best_task = max(scores, key=lambda t: scores[t])

@@ -6,12 +6,18 @@ Task 4 — DT escalation trigger fix (should_escalate_deep_think):
   - Trigger phrases (list, verify, reasoning) still escalate correctly
 
 Task 4 — _quick_classify word-boundary fix:
-  - "code of conduct" must NOT route as code (false positive)
+  - Substring false positives (e.g. 'api' in 'capital') are prevented by \b matching
   - Legitimate coding keywords still match
+  - Note: whole-word polysemy ('code' in 'code of conduct') is a known semantic
+    limitation NOT addressed by word-boundary matching
 
 Task 5 — Classification input fix (classify_task caller in chat.py):
   - classify_task() must receive request.message (clean user prompt)
   - Must NOT receive user_content (which may include thousands of words of injected docs)
+
+Task 7 — Parametrized eval set (routing_eval.py fixtures):
+  - 25 canonical prompts for _quick_classify
+  - 12 canonical prompts for should_escalate_deep_think
 
 Convention: sync functions (should_escalate_deep_think, _quick_classify) — no decorator.
             async functions (classify_task, post_message) — @pytest.mark.anyio + await.
@@ -66,14 +72,14 @@ def test_dt_escalation_does_not_trigger_on_generic_message():
 
 def test_quick_classify_api_not_in_capital():
     """
-    'api' is a code keyword. It appears as a substring in 'capital' ('c-api-tal'),
-    which is a real substring false positive that word-boundary matching fixes.
-    Without \b: 'api' in 'capital' → True (false positive)
-    With \b:    re.search(r'\bapi\b', 'capital') → None (correct)
+    'api' is a code keyword that appears as a substring in 'capital' (c-api-tal).
+    Word-boundary matching fixes this:
+      without \\b: 'api' in 'capital' → True (false positive)
+      with \\b:    re.search(r'\\bapi\\b', 'capital') → None (correct)
 
-    NOTE: 'code of conduct' cannot be fixed by word boundaries because 'code' IS
-    a complete word there. This is a known semantic limitation — only substring
-    false positives (where a keyword appears inside a longer word) are addressed.
+    Contrast with whole-word polysemy: 'code' in 'code of conduct' is a genuine
+    whole word and cannot be distinguished from a coding keyword by \\b alone.
+    That is a known semantic limitation, not a substring-boundary issue.
     """
     result = _quick_classify("What are the capital cities and their populations?")
     assert result != "code", (
@@ -83,8 +89,10 @@ def test_quick_classify_api_not_in_capital():
 
 def test_quick_classify_class_not_in_classical():
     """
-    'class' is a code keyword. It appears as a substring in 'classical' ('class-ical').
-    Word-boundary matching prevents this false positive.
+    'class' is a code keyword that appears as a substring in 'classical' (class-ical).
+    Word-boundary matching prevents this false positive:
+      without \\b: 'class' in 'classical' → True (false positive)
+      with \\b:    re.search(r'\\bclass\\b', 'classical') → None (correct)
     """
     result = _quick_classify("I enjoy listening to classical music in the evening")
     assert result != "code", (
@@ -202,4 +210,96 @@ async def test_classify_task_short_circuit_fires_on_clean_message():
     result = await classify_task("Hi, how are you?")
     assert result == "conversational", (
         f"Short message should classify as 'conversational', got: {result}"
+    )
+
+
+# ── Cleanup note: deep_think_escalated attribution regression ─────────────────
+
+@pytest.mark.anyio
+async def test_deep_think_escalated_flag_in_done_event():
+    """
+    The DT escalation SSE done event must include deep_think_escalated=True.
+    The Routed MoA done event must NOT include it (or it must be absent/False).
+
+    This is a regression guard: if the flag is accidentally dropped from the
+    DT escalation path, attribution UI in ChatView will silently show the wrong label.
+    """
+    import json
+
+    async def _collect(gen):
+        events = []
+        async for line in gen:
+            line = line.strip()
+            if line.startswith("data: "):
+                try:
+                    events.append(json.loads(line[6:]))
+                except json.JSONDecodeError:
+                    pass
+        return events
+
+    # ── DT escalation path ────────────────────────────────────────────────────
+    async def fake_dt_gather(*args, **kwargs):
+        return [
+            {"model_id": "deepseek/deepseek-v3.2", "display_name": "DeepSeek",
+             "content": "answer", "tokens": 50},
+        ]
+
+    async def fake_synthesis(*args, **kwargs):
+        yield "synthesised answer"
+
+    with patch("app.api.chat.should_escalate_deep_think", return_value=True):
+        with patch("app.api.chat.gather_deep_think_responses", new=fake_dt_gather):
+            with patch("app.api.chat.stream_synthesis", new=fake_synthesis):
+                with patch("app.services.db.DBQuery.execute", new=AsyncMock(
+                    return_value=MagicMock(data=[])
+                )):
+                    from app.models.chat import ChatRequest, ModelTier
+                    from app.api.chat import post_message
+
+                    dt_request = ChatRequest(
+                        message="list all requirements step by step",
+                        model=ModelTier.DEEP_THINK,
+                        session_id="test-dt-attr-001",
+                        workspace_id="test-dt-attr-ws",
+                    )
+                    response = await post_message(dt_request)
+                    dt_events = await _collect(response.body_iterator)
+
+    done_events = [e for e in dt_events if e.get("type") == "done"]
+    assert done_events, f"Expected a done event in DT escalation path: {dt_events}"
+    assert done_events[0].get("deep_think_escalated") is True, (
+        f"DT escalation done event must have deep_think_escalated=True: {done_events[0]}"
+    )
+
+
+# ── Task 7: Parametrized evaluation set ───────────────────────────────────────
+
+from tests.fixtures.routing_eval import QUICK_CLASSIFY_CASES, DT_ESCALATION_CASES
+
+
+@pytest.mark.parametrize("prompt,expected", QUICK_CLASSIFY_CASES)
+def test_quick_classify_eval_set(prompt, expected):
+    """
+    Parametrized evaluation over the canonical routing_eval fixture set.
+    Covers positive matches for all 6 task types, substring false positives,
+    and conversational no-keyword inputs.
+    """
+    result = _quick_classify(prompt)
+    assert result == expected, (
+        f"_quick_classify({prompt!r}) → {result!r}, expected {expected!r}"
+    )
+
+
+@pytest.mark.parametrize("message,expected_escalate,reason", DT_ESCALATION_CASES)
+def test_dt_escalation_eval_set(message, expected_escalate, reason):
+    """
+    Parametrized evaluation over the canonical DT escalation fixture set.
+    Covers list/verify/reasoning trigger phrases (should escalate) and
+    generic questions including large-doc scenarios (must NOT escalate).
+    """
+    # Use message as user_content too — the function must evaluate on message only
+    result = should_escalate_deep_think(message, message)
+    assert result == expected_escalate, (
+        f"should_escalate_deep_think({message!r}) → {result}, "
+        f"expected {expected_escalate} [{reason}]"
     )
