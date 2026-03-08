@@ -343,6 +343,13 @@
     opacity: 0.5;
 }
 
+.no-response-error {
+    color: #b91c1c;
+    font-size: 13px;
+    font-style: italic;
+    opacity: 0.8;
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 0.3; }
     50%       { opacity: 1; }

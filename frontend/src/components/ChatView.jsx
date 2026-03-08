@@ -328,7 +328,9 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                                                     remarkPlugins={[remarkMath, remarkGfm]}
                                                     rehypePlugins={[rehypeKatex]}
                                                   >{msg.content}</ReactMarkdown>
-                                                : null
+                                                : !streaming
+                                                    ? <span className="no-response-error">No response received — please try again.</span>
+                                                    : null
                                     ) : msg.content}
                                 </div>
                                 {msg.attribution && (
