@@ -335,11 +335,13 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                                 </div>
                                 {msg.attribution && (
                                     <div className="attribution-footer">
-                                        {msg.attribution.simple
-                                            ? <>⚡ Routed — fast response</>
-                                            : msg.attribution.models_used
-                                                ? <>⚡ Synthesised from {msg.attribution.models_used.join(' · ')}</>
-                                                : null}
+                                        {msg.attribution.deep_think_escalated && msg.attribution.models_used
+                                            ? <>🧠 Deep analysis — synthesised from {msg.attribution.models_used.join(' · ')}</>
+                                            : msg.attribution.simple
+                                                ? <>⚡ Routed — fast response</>
+                                                : msg.attribution.models_used
+                                                    ? <>⚡ Synthesised from {msg.attribution.models_used.join(' · ')}</>
+                                                    : null}
                                         {msg.attribution.total_tokens > 0 && (
                                             <span className="token-count"> · {msg.attribution.total_tokens.toLocaleString()} tokens</span>
                                         )}

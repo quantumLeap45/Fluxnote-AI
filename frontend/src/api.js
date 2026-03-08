@@ -163,7 +163,7 @@ export const streamChatMessage = async ({ message, model, fileIds, sessionId, as
             if (data.type === 'chunk')          onChunk(data.content);
             if (data.type === 'thinking_chunk') onThinkingChunk?.(data.content);
             if (data.type === 'routing_status') onRoutingStatus?.(data);
-            if (data.type === 'done')           onDone(data.routed ? { models_used: data.routed_simple ? null : data.models_used, total_tokens: data.total_tokens, simple: data.routed_simple } : (data.total_tokens > 0 ? { total_tokens: data.total_tokens } : null));
+            if (data.type === 'done')           onDone(data.routed ? { models_used: data.routed_simple ? null : data.models_used, total_tokens: data.total_tokens, simple: data.routed_simple, deep_think_escalated: data.deep_think_escalated ?? false } : (data.total_tokens > 0 ? { total_tokens: data.total_tokens } : null));
             if (data.type === 'error')          onError(data.message);
         } catch { /* skip malformed lines */ }
     };
