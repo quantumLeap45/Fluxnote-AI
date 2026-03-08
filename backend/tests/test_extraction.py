@@ -18,7 +18,7 @@ from app.services.assignment_extractor import _call_openrouter, extract_assignme
 
 # ── Happy path ──────────────────────────────────────────────────────────────
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_extract_returns_parsed_dict():
     """extract_assignment_data returns a dict on clean response."""
     good_payload = {
@@ -43,7 +43,7 @@ async def test_extract_returns_parsed_dict():
 
 # ── Timeout path ─────────────────────────────────────────────────────────────
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_extract_raises_timeout_on_slow_api():
     """extract_assignment_data propagates asyncio.TimeoutError on slow response."""
     async def slow_post(*args, **kwargs):
@@ -56,7 +56,7 @@ async def test_extract_raises_timeout_on_slow_api():
 
 # ── JSON parse failure ────────────────────────────────────────────────────────
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_extract_raises_value_error_on_malformed_json():
     """_call_openrouter raises ValueError when AI returns non-JSON content."""
     mock_resp = MagicMock()
@@ -73,7 +73,7 @@ async def test_extract_raises_value_error_on_malformed_json():
 
 # ── HTTP 429 rate limit ───────────────────────────────────────────────────────
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_extract_raises_runtime_error_on_429():
     """_call_openrouter raises RuntimeError with rate-limit message on HTTP 429."""
     mock_resp = MagicMock()
@@ -89,7 +89,7 @@ async def test_extract_raises_runtime_error_on_429():
 
 # ── HTTP 500 server error ─────────────────────────────────────────────────────
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_extract_raises_runtime_error_on_500():
     """_call_openrouter raises RuntimeError on HTTP 5xx errors."""
     mock_resp = MagicMock()
@@ -105,7 +105,7 @@ async def test_extract_raises_runtime_error_on_500():
 
 # ── httpx timeout converts to asyncio.TimeoutError ───────────────────────────
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_extract_converts_httpx_timeout_to_asyncio_timeout():
     """_call_openrouter raises asyncio.TimeoutError when httpx times out."""
     with patch("httpx.AsyncClient.post", new=AsyncMock(side_effect=httpx.TimeoutException("timed out"))):
