@@ -57,6 +57,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
     const textareaRef = useRef(null);
     const assignmentContextRef = useRef(null);
     const assignmentFileIdsRef = useRef([]);
+    const [contextAssignmentName, setContextAssignmentName] = useState(null);
 
     // Cache messages on unmount so switching back is instant
     const messagesRef = useRef(messages);
@@ -87,6 +88,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
         assignmentContextRef.current = initialContext;
         assignmentFileIdsRef.current = initialContext.file_ids
             || (initialContext.file_id ? [initialContext.file_id] : []);
+        setContextAssignmentName(initialContext.title || initialContext.filename || 'Assignment');
         setInputText(`Help me understand my assignment: "${initialContext.title || initialContext.filename}"`);
         onContextConsumed?.();
     }, [initialContext]);
@@ -194,8 +196,10 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
 
     const handleFileUpload = async (e) => {
         const selectedFiles = Array.from(e.target.files);
+        // Snapshot count at loop start — files state is stale inside an async loop
+        let uploadedCount = files.length;
         for (const file of selectedFiles) {
-            if (files.length >= 5) break;
+            if (uploadedCount >= 5) break;
             setUploading(true);
             try {
                 let result;
@@ -206,6 +210,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                     result = await uploadFile(file, sessionId);
                 }
                 setFiles(prev => [...prev, { ...result, addedToDashboard: false }]);
+                uploadedCount++;
             } catch (err) {
                 setError(`Upload failed: ${err.message}`);
             } finally {
@@ -346,6 +351,14 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
 
             {/* Prompt Composer */}
             <div className="prompt-composer-container">
+                {/* Assignment context indicator */}
+                {contextAssignmentName && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', marginBottom: '4px', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '6px', fontSize: '12px', color: '#166534' }}>
+                        <span>📎</span>
+                        <span>Assignment context active: <strong>{contextAssignmentName}</strong></span>
+                    </div>
+                )}
+
                 {/* Uploaded Files Chips */}
                 {files.length > 0 && (
                     <div className="file-chips-area animate-fade-in">

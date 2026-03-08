@@ -1,7 +1,10 @@
 import asyncio
 import json
+import logging
 import httpx
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 EXTRACTION_SYSTEM_PROMPT = """You are a general-purpose academic assignment parser. You work across all subjects, schools, and assignment formats — math, report, coding, group project, reflection, lab, case study, etc.
 Return ONLY valid JSON — no markdown, no code blocks, no explanation.
@@ -45,18 +48,34 @@ async def _call_openrouter(text: str) -> dict:
         "stream": False,
     }
     async with httpx.AsyncClient(timeout=42) as client:
-        resp = await client.post(
-            f"{settings.OPENROUTER_BASE_URL}/chat/completions",
-            headers=headers,
-            json=payload,
-        )
-        resp.raise_for_status()
+        try:
+            resp = await client.post(
+                f"{settings.OPENROUTER_BASE_URL}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status == 429:
+                logger.warning("assignment_extractor: rate limited (429) by OpenRouter")
+                raise RuntimeError("AI service rate limit hit — please retry in a moment") from e
+            logger.error("assignment_extractor: HTTP %d from OpenRouter", status)
+            raise RuntimeError(f"AI service returned HTTP {status}") from e
+        except httpx.TimeoutException as e:
+            logger.warning("assignment_extractor: HTTP request timed out")
+            raise asyncio.TimeoutError() from e
+
         content = resp.json()["choices"][0]["message"]["content"].strip()
         if content.startswith("```"):
             content = content.split("```")[1]
             if content.startswith("json"):
                 content = content[4:]
-        return json.loads(content)
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            logger.error("assignment_extractor: model returned malformed JSON: %s…", content[:200])
+            raise ValueError("AI returned malformed JSON — please retry") from e
 
 
 async def extract_assignment_data(text: str) -> dict:

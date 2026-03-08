@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -6,6 +7,8 @@ from typing import AsyncGenerator
 
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
+
+logger = logging.getLogger(__name__)
 
 from app.config import settings
 from app.models.chat import ChatRequest, ModelTier
@@ -339,24 +342,29 @@ async def post_message(request: ChatRequest):
                         chunks.append(chunk)
                         yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
-                    await (
-                        db.table("chat_messages")
-                        .insert({
-                            "id":         str(uuid.uuid4()),
-                            "session_id": request.session_id,
-                            "role":       "assistant",
-                            "content":    "".join(chunks),
-                            "model":      request.model.value,
-                            "created_at": datetime.now(timezone.utc).isoformat(),
-                        })
-                        .execute()
-                    )
-                    yield "data: " + json.dumps({
-                        "type":           "done",
-                        "routed":         True,
-                        "routed_simple":  True,
-                        "total_tokens":   usage_out_conv.get("total_tokens", 0),
-                    }) + "\n\n"
+                    content_conv = "".join(chunks)
+                    if not content_conv:
+                        logger.warning("chat: conversational stream produced no content; skipping DB insert")
+                        yield "data: " + json.dumps({"type": "error", "message": "AI returned an empty response. Please try again."}) + "\n\n"
+                    else:
+                        await (
+                            db.table("chat_messages")
+                            .insert({
+                                "id":         str(uuid.uuid4()),
+                                "session_id": request.session_id,
+                                "role":       "assistant",
+                                "content":    content_conv,
+                                "model":      request.model.value,
+                                "created_at": datetime.now(timezone.utc).isoformat(),
+                            })
+                            .execute()
+                        )
+                        yield "data: " + json.dumps({
+                            "type":           "done",
+                            "routed":         True,
+                            "routed_simple":  True,
+                            "total_tokens":   usage_out_conv.get("total_tokens", 0),
+                        }) + "\n\n"
 
                 else:
                     selected = TASK_ROUTING.get(task_type, TASK_ROUTING["general"])[:MAX_ROUTED_MODELS]
@@ -375,24 +383,29 @@ async def post_message(request: ChatRequest):
                         yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
                     attribution = build_attribution(model_results)
-                    await (
-                        db.table("chat_messages")
-                        .insert({
-                            "id":         str(uuid.uuid4()),
-                            "session_id": request.session_id,
-                            "role":       "assistant",
-                            "content":    "".join(chunks),
-                            "model":      request.model.value,
-                            "created_at": datetime.now(timezone.utc).isoformat(),
-                        })
-                        .execute()
-                    )
-                    yield "data: " + json.dumps({
-                        "type":         "done",
-                        "routed":       True,
-                        "models_used":  attribution["models_used"],
-                        "total_tokens": attribution["total_tokens"],
-                    }) + "\n\n"
+                    content_routed = "".join(chunks)
+                    if not content_routed:
+                        logger.warning("chat: routed synthesis stream produced no content; skipping DB insert")
+                        yield "data: " + json.dumps({"type": "error", "message": "AI returned an empty response. Please try again."}) + "\n\n"
+                    else:
+                        await (
+                            db.table("chat_messages")
+                            .insert({
+                                "id":         str(uuid.uuid4()),
+                                "session_id": request.session_id,
+                                "role":       "assistant",
+                                "content":    content_routed,
+                                "model":      request.model.value,
+                                "created_at": datetime.now(timezone.utc).isoformat(),
+                            })
+                            .execute()
+                        )
+                        yield "data: " + json.dumps({
+                            "type":         "done",
+                            "routed":       True,
+                            "models_used":  attribution["models_used"],
+                            "total_tokens": attribution["total_tokens"],
+                        }) + "\n\n"
 
             elif request.model == ModelTier.DEEP_THINK and should_escalate_deep_think(request.message, user_content):
                 # ── Deep Think escalated: parallel DeepSeek + Gemini ──────────
@@ -411,24 +424,29 @@ async def post_message(request: ChatRequest):
                     yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
                 attribution = build_attribution(dt_results)
-                await (
-                    db.table("chat_messages")
-                    .insert({
-                        "id":         str(uuid.uuid4()),
-                        "session_id": request.session_id,
-                        "role":       "assistant",
-                        "content":    "".join(chunks),
-                        "model":      request.model.value,
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    })
-                    .execute()
-                )
-                yield "data: " + json.dumps({
-                    "type":         "done",
-                    "routed":       True,
-                    "models_used":  attribution["models_used"],
-                    "total_tokens": attribution["total_tokens"],
-                }) + "\n\n"
+                content_dt = "".join(chunks)
+                if not content_dt:
+                    logger.warning("chat: Deep Think stream produced no content; skipping DB insert")
+                    yield "data: " + json.dumps({"type": "error", "message": "AI returned an empty response. Please try again."}) + "\n\n"
+                else:
+                    await (
+                        db.table("chat_messages")
+                        .insert({
+                            "id":         str(uuid.uuid4()),
+                            "session_id": request.session_id,
+                            "role":       "assistant",
+                            "content":    content_dt,
+                            "model":      request.model.value,
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                        .execute()
+                    )
+                    yield "data: " + json.dumps({
+                        "type":         "done",
+                        "routed":       True,
+                        "models_used":  attribution["models_used"],
+                        "total_tokens": attribution["total_tokens"],
+                    }) + "\n\n"
 
             else:
                 usage_out: dict = {}
@@ -446,24 +464,30 @@ async def post_message(request: ChatRequest):
                         chunks.append(chunk)
                         yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
-                await (
-                    db.table("chat_messages")
-                    .insert({
-                        "id":         str(uuid.uuid4()),
-                        "session_id": request.session_id,
-                        "role":       "assistant",
-                        "content":    "".join(chunks),
-                        "model":      request.model.value,
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    })
-                    .execute()
-                )
-                done_payload: dict = {"type": "done"}
-                if usage_out.get("total_tokens"):
-                    done_payload["total_tokens"] = usage_out["total_tokens"]
-                yield "data: " + json.dumps(done_payload) + "\n\n"
+                content_single = "".join(chunks)
+                if not content_single:
+                    logger.warning("chat: single-model stream produced no content; skipping DB insert")
+                    yield "data: " + json.dumps({"type": "error", "message": "AI returned an empty response. Please try again."}) + "\n\n"
+                else:
+                    await (
+                        db.table("chat_messages")
+                        .insert({
+                            "id":         str(uuid.uuid4()),
+                            "session_id": request.session_id,
+                            "role":       "assistant",
+                            "content":    content_single,
+                            "model":      request.model.value,
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                        .execute()
+                    )
+                    done_payload: dict = {"type": "done"}
+                    if usage_out.get("total_tokens"):
+                        done_payload["total_tokens"] = usage_out["total_tokens"]
+                    yield "data: " + json.dumps(done_payload) + "\n\n"
 
         except Exception as e:
+            logger.error("chat: stream error: %s", e, exc_info=True)
             yield "data: " + json.dumps({"type": "error", "message": str(e)}) + "\n\n"
 
     return StreamingResponse(

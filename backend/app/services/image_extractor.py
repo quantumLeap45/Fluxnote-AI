@@ -17,6 +17,10 @@ _VISION_PROMPT = (
 
 _MAX_IMAGES = 20
 _MIN_IMAGE_BYTES = 5_000  # skip decorative images (logos, icons) — too small to contain text
+_MAX_CONCURRENT_VISION = 5   # semaphore — cap parallel OpenRouter vision calls
+_OVERALL_VISION_TIMEOUT = 90  # seconds — total budget for all image OCR per file
+
+_vision_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_VISION)
 
 
 def _extract_images_from_docx(content: bytes) -> List[bytes]:
@@ -56,6 +60,12 @@ def _extract_images_from_pdf(content: bytes) -> List[bytes]:
     except Exception:
         pass
     return images
+
+
+async def _call_vision_llm_limited(image_bytes: bytes) -> str:
+    """Semaphore-wrapped vision call — max _MAX_CONCURRENT_VISION in flight at once."""
+    async with _vision_semaphore:
+        return await _call_vision_llm(image_bytes)
 
 
 async def _call_vision_llm(image_bytes: bytes) -> str:
@@ -110,8 +120,16 @@ async def extract_image_text(content: bytes, filename: str) -> str:
     if not images:
         return ""
 
-    # Parallel calls — all images at once, cap latency at single call duration (~30s)
-    tasks = [_call_vision_llm(img) for img in images]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    # Semaphore-limited parallel calls — max _MAX_CONCURRENT_VISION at once.
+    # Overall timeout prevents a hung image from blocking the entire extraction.
+    tasks = [_call_vision_llm_limited(img) for img in images]
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=_OVERALL_VISION_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        return ""  # best-effort: return empty rather than blocking the caller
+
     texts = [r for r in results if isinstance(r, str) and r.strip()]
     return "\n\n".join(texts)

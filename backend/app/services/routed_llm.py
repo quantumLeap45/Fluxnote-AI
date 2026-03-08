@@ -11,9 +11,12 @@ Flow:
 
 import asyncio
 import json
+import logging
 import httpx
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -137,7 +140,8 @@ async def classify_task(message: str) -> str:
             resp.raise_for_status()
             result = resp.json()["choices"][0]["message"]["content"].strip().lower()
             return result if result in TASK_ROUTING else "general"
-    except Exception:
+    except Exception as e:
+        logger.warning("routed_llm: classify_task LLM fallback failed (%s); defaulting to 'general'", e)
         return "general"
 
 
@@ -192,6 +196,13 @@ async def gather_model_responses(
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     valid = [r for r in results if isinstance(r, dict)]
+    failures = [r for r in results if isinstance(r, BaseException)]
+    if failures:
+        logger.warning(
+            "routed_llm: %d/%d model call(s) failed during gather: %s",
+            len(failures), len(results),
+            [str(f) for f in failures],
+        )
     if not valid:
         raise RuntimeError("All parallel model calls failed during routing")
     return valid
@@ -230,6 +241,13 @@ async def gather_deep_think_responses(messages: list[dict]) -> list[dict]:
     tasks = [_call_model_complete(messages, m, headers, timeout=20) for m in models]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     valid = [r for r in results if isinstance(r, dict)]
+    dt_failures = [r for r in results if isinstance(r, BaseException)]
+    if dt_failures:
+        logger.warning(
+            "routed_llm: %d/%d Deep Think call(s) failed: %s",
+            len(dt_failures), len(results),
+            [str(f) for f in dt_failures],
+        )
     if not valid:
         raise RuntimeError("All Deep Think model calls failed during escalation")
     return valid

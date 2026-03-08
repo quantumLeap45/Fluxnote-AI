@@ -13,29 +13,35 @@ import {
     renameChatTitle,
     listAssignments,
     deleteAssignment,
+    clearChatHistory,
 } from './api';
 
 function App() {
-    const [activeChatId, setActiveChatId]   = useState(() => getSessionId());
-    const [workspaceId]                     = useState(() => getWorkspaceId());
-    const [chats, setChats]                 = useState(() => getStoredChats());
-    const [activeTab, setActiveTab]         = useState('chat');
-    const [chatContext, setChatContext]     = useState(null);
-    const [assignments, setAssignments]     = useState([]);
-    const historyCacheRef                   = useRef(new Map());
+    const [activeChatId, setActiveChatId]     = useState(() => getSessionId());
+    const [workspaceId]                       = useState(() => getWorkspaceId());
+    const [chats, setChats]                   = useState(() => getStoredChats());
+    const [activeTab, setActiveTab]           = useState('chat');
+    const [chatContext, setChatContext]       = useState(null);
+    const [assignments, setAssignments]       = useState([]);
+    const [assignmentFetchError, setAssignmentFetchError] = useState(false);
+    const historyCacheRef                     = useRef(new Map());
 
     const refreshChats = useCallback(() => setChats(getStoredChats()), []);
 
     // Fetch assignments once — persists across tab switches
     useEffect(() => {
         listAssignments(workspaceId)
-            .then(data => setAssignments(data.assignments || []))
-            .catch(() => {});
+            .then(data => {
+                setAssignments(data.assignments || []);
+                setAssignmentFetchError(false);
+            })
+            .catch(() => setAssignmentFetchError(true));
     }, [workspaceId]);
 
     const handleNewChat = useCallback(() => {
         const newId = createNewChatSession();
         setActiveChatId(newId);
+        setChats(getStoredChats());
         setActiveTab('chat');
         setChatContext(null);
     }, []);
@@ -47,7 +53,7 @@ function App() {
         setChatContext(null);
     }, []);
 
-    const handleDeleteChat = useCallback((id) => {
+    const handleDeleteChat = useCallback(async (id) => {
         removeStoredChat(id);
         refreshChats();
         if (id === activeChatId) {
@@ -58,6 +64,10 @@ function App() {
                 handleNewChat();
             }
         }
+        // Best-effort: delete backend messages. UI already updated; show notice on failure.
+        clearChatHistory(id).catch(() => {
+            alert('Chat removed locally. Could not clear server history — some messages may remain.');
+        });
     }, [activeChatId, refreshChats, handleSelectChat, handleNewChat]);
 
     const handleFirstMessage = useCallback((id, message) => {
@@ -79,7 +89,9 @@ function App() {
         try {
             await deleteAssignment(cardId, workspaceId);
             setAssignments(prev => prev.filter(a => a.id !== cardId));
-        } catch { /* silent */ }
+        } catch {
+            alert('Failed to delete assignment. Please try again.');
+        }
     }, [workspaceId]);
 
     const handleCardCreated = useCallback((card) => {
@@ -125,6 +137,13 @@ function App() {
                     <DashboardView
                         workspaceId={workspaceId}
                         assignments={assignments}
+                        fetchError={assignmentFetchError}
+                        onRetryFetch={() => {
+                            setAssignmentFetchError(false);
+                            listAssignments(workspaceId)
+                                .then(data => setAssignments(data.assignments || []))
+                                .catch(() => setAssignmentFetchError(true));
+                        }}
                         onAskAI={openChatWithContext}
                         onAssignmentUpdate={handleAssignmentUpdate}
                         onDeleteCard={handleDeleteCard}
