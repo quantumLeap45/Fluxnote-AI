@@ -378,11 +378,14 @@ async def post_message(request: ChatRequest):
 
                     yield "data: " + json.dumps({"type": "routing_status", "step": "synthesising"}) + "\n\n"
 
-                    async for chunk in stream_synthesis(model_results, task_type, messages):
+                    synthesis_usage: dict = {}
+                    async for chunk in stream_synthesis(model_results, task_type, messages, synthesis_usage):
                         chunks.append(chunk)
                         yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
                     attribution = build_attribution(model_results)
+                    proposer_tokens = attribution["total_tokens"]
+                    synthesis_tokens = synthesis_usage.get("total_tokens", 0)
                     content_routed = "".join(chunks)
                     if not content_routed:
                         logger.warning("chat: routed synthesis stream produced no content; skipping DB insert")
@@ -404,7 +407,7 @@ async def post_message(request: ChatRequest):
                             "type":         "done",
                             "routed":       True,
                             "models_used":  attribution["models_used"],
-                            "total_tokens": attribution["total_tokens"],
+                            "total_tokens": proposer_tokens + synthesis_tokens,
                         }) + "\n\n"
 
             elif request.model == ModelTier.DEEP_THINK and should_escalate_deep_think(request.message, user_content):
@@ -419,11 +422,14 @@ async def post_message(request: ChatRequest):
 
                 yield "data: " + json.dumps({"type": "routing_status", "step": "synthesising"}) + "\n\n"
 
-                async for chunk in stream_synthesis(dt_results, "analysis", messages):
+                dt_synthesis_usage: dict = {}
+                async for chunk in stream_synthesis(dt_results, "analysis", messages, dt_synthesis_usage):
                     chunks.append(chunk)
                     yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
 
                 attribution = build_attribution(dt_results)
+                dt_proposer_tokens = attribution["total_tokens"]
+                dt_synthesis_tokens = dt_synthesis_usage.get("total_tokens", 0)
                 content_dt = "".join(chunks)
                 if not content_dt:
                     logger.warning("chat: Deep Think stream produced no content; skipping DB insert")
@@ -442,10 +448,11 @@ async def post_message(request: ChatRequest):
                         .execute()
                     )
                     yield "data: " + json.dumps({
-                        "type":         "done",
-                        "routed":       True,
-                        "models_used":  attribution["models_used"],
-                        "total_tokens": attribution["total_tokens"],
+                        "type":              "done",
+                        "routed":            True,
+                        "deep_think_escalated": True,
+                        "models_used":       attribution["models_used"],
+                        "total_tokens":      dt_proposer_tokens + dt_synthesis_tokens,
                     }) + "\n\n"
 
             else:

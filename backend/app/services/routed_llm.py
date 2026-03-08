@@ -270,10 +270,12 @@ async def stream_synthesis(
     model_results: list[dict],
     task_type: str,
     original_messages: list[dict],
+    usage_out: dict | None = None,
 ):
     """
     Async generator — streams the synthesis response chunk by chunk.
     Uses DeepSeek V3.2 as synthesizer.
+    If usage_out dict is provided, it will be populated with synthesis token usage.
     """
     perspectives = "\n\n".join(
         f"[Perspective {i + 1} — {r['display_name']}]:\n{r['content']}"
@@ -304,6 +306,7 @@ async def stream_synthesis(
         "messages": synthesis_messages,
         "max_tokens": 2048,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
@@ -321,6 +324,8 @@ async def stream_synthesis(
                     break
                 try:
                     parsed = json.loads(data)
+                    if usage_out is not None and parsed.get("usage"):
+                        usage_out.update(parsed["usage"])
                     chunk = parsed["choices"][0]["delta"].get("content", "")
                     if chunk:
                         yield chunk
