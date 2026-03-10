@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -69,6 +70,7 @@ Do not assist with plagiarism evasion, AI-detection bypassing, or rule-dodging. 
 
 CHAT_FILE_CONTEXT_LIMIT = 40_000   # chars — total budget for explicitly uploaded files
 RESOLVED_DOC_LIMIT      = 20_000   # chars per file for on-demand resolved assignments
+SYNTHESIS_TIMEOUT_S     = 45.0     # seconds — synthesis stream must complete within this
 
 # ── Manifest entry regex ────────────────────────────────────────────────────
 # Matches lines like:  #1 [id:abc-123] Title | Module | Due: ... | ...
@@ -334,7 +336,7 @@ async def post_message(request: ChatRequest):
             if request.model == ModelTier.ROUTED:
                 # Show routing progress to the client before any model is called
                 yield "data: " + json.dumps({"type": "routing_status", "step": "classifying"}) + "\n\n"
-                task_type = await classify_task(user_content)
+                task_type = await classify_task(request.message)
 
                 if task_type == "conversational":
                     usage_out_conv: dict = {}
@@ -378,11 +380,20 @@ async def post_message(request: ChatRequest):
 
                     yield "data: " + json.dumps({"type": "routing_status", "step": "synthesising"}) + "\n\n"
 
-                    async for chunk in stream_synthesis(model_results, task_type, messages):
-                        chunks.append(chunk)
-                        yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
+                    synthesis_usage: dict = {}
+                    try:
+                        async with asyncio.timeout(SYNTHESIS_TIMEOUT_S):
+                            async for chunk in stream_synthesis(model_results, task_type, messages, synthesis_usage):
+                                chunks.append(chunk)
+                                yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
+                    except asyncio.TimeoutError:
+                        logger.warning("chat: routed synthesis timed out after %.0fs", SYNTHESIS_TIMEOUT_S)
+                        yield "data: " + json.dumps({"type": "error", "message": "Response took too long — please try again."}) + "\n\n"
+                        return
 
                     attribution = build_attribution(model_results)
+                    proposer_tokens = attribution["total_tokens"]
+                    synthesis_tokens = synthesis_usage.get("total_tokens", 0)
                     content_routed = "".join(chunks)
                     if not content_routed:
                         logger.warning("chat: routed synthesis stream produced no content; skipping DB insert")
@@ -404,7 +415,7 @@ async def post_message(request: ChatRequest):
                             "type":         "done",
                             "routed":       True,
                             "models_used":  attribution["models_used"],
-                            "total_tokens": attribution["total_tokens"],
+                            "total_tokens": proposer_tokens + synthesis_tokens,
                         }) + "\n\n"
 
             elif request.model == ModelTier.DEEP_THINK and should_escalate_deep_think(request.message, user_content):
@@ -419,11 +430,20 @@ async def post_message(request: ChatRequest):
 
                 yield "data: " + json.dumps({"type": "routing_status", "step": "synthesising"}) + "\n\n"
 
-                async for chunk in stream_synthesis(dt_results, "analysis", messages):
-                    chunks.append(chunk)
-                    yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
+                dt_synthesis_usage: dict = {}
+                try:
+                    async with asyncio.timeout(SYNTHESIS_TIMEOUT_S):
+                        async for chunk in stream_synthesis(dt_results, "analysis", messages, dt_synthesis_usage):
+                            chunks.append(chunk)
+                            yield "data: " + json.dumps({"type": "chunk", "content": chunk}) + "\n\n"
+                except asyncio.TimeoutError:
+                    logger.warning("chat: Deep Think synthesis timed out after %.0fs", SYNTHESIS_TIMEOUT_S)
+                    yield "data: " + json.dumps({"type": "error", "message": "Response took too long — please try again."}) + "\n\n"
+                    return
 
                 attribution = build_attribution(dt_results)
+                dt_proposer_tokens = attribution["total_tokens"]
+                dt_synthesis_tokens = dt_synthesis_usage.get("total_tokens", 0)
                 content_dt = "".join(chunks)
                 if not content_dt:
                     logger.warning("chat: Deep Think stream produced no content; skipping DB insert")
@@ -442,10 +462,11 @@ async def post_message(request: ChatRequest):
                         .execute()
                     )
                     yield "data: " + json.dumps({
-                        "type":         "done",
-                        "routed":       True,
-                        "models_used":  attribution["models_used"],
-                        "total_tokens": attribution["total_tokens"],
+                        "type":              "done",
+                        "routed":            True,
+                        "deep_think_escalated": True,
+                        "models_used":       attribution["models_used"],
+                        "total_tokens":      dt_proposer_tokens + dt_synthesis_tokens,
                     }) + "\n\n"
 
             else:

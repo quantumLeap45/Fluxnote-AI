@@ -12,6 +12,7 @@ Flow:
 import asyncio
 import json
 import logging
+import re
 import httpx
 
 from app.config import settings
@@ -98,10 +99,41 @@ User message: {message}
 Task type:"""
 
 
+def _word_match(keywords: list[str], text: str) -> bool:
+    """
+    Return True if any keyword from the list matches as a complete token in text.
+
+    Single-word keywords use \\b word-boundary anchors to prevent substring false
+    positives (e.g. 'api' inside 'capital', 'class' inside 'classical',
+    'bug' inside 'debugging').
+    Multi-word phrases (e.g. "cover letter") use substring matching since they
+    are inherently unambiguous.
+
+    Note: whole-word polysemy (e.g. 'code' in 'code of conduct') is a known
+    semantic limitation that word-boundary matching does not address.
+    """
+    for kw in keywords:
+        if " " in kw:
+            # Multi-word phrase — substring match is fine
+            if kw in text:
+                return True
+        else:
+            # Single word — require word boundary to avoid substring FPs
+            if re.search(r"\b" + re.escape(kw) + r"\b", text):
+                return True
+    return False
+
+
 def _quick_classify(message: str) -> str | None:
-    """Keyword-based classification — avoids an extra API call for common cases."""
+    """
+    Keyword-based classification — avoids an extra API call for common cases.
+    Uses _word_match() for word-boundary-aware keyword scoring.
+    """
     lower = message.lower()
-    scores = {task: sum(1 for kw in kws if kw in lower) for task, kws in _KEYWORD_MAP.items()}
+    scores = {
+        task: sum(1 for kw in kws if _word_match([kw], lower))
+        for task, kws in _KEYWORD_MAP.items()
+    }
     best_task = max(scores, key=lambda t: scores[t])
     return best_task if scores[best_task] > 0 else None
 
@@ -225,13 +257,19 @@ _DT_REASONING_TRIGGERS = [
 
 
 def should_escalate_deep_think(message: str, user_content: str) -> bool:
-    """Return True if Deep Think should use the dual-model escalated path."""
-    lower_msg = message.lower()
-    heavy_context = len(user_content) > len(message) + 3000
+    """
+    Return True if Deep Think should use the dual-model escalated path.
+
+    Escalation is triggered only by explicit intent signals in the user's message.
+    Document context size (user_content length) is intentionally NOT a trigger —
+    any uploaded doc would otherwise force synthesis, hiding the reasoning panel.
+    The user_content param is kept for caller compatibility.
+    """
+    lower_msg     = message.lower()
     list_hit      = any(t in lower_msg for t in _DT_LIST_TRIGGERS)
     verify_hit    = any(t in lower_msg for t in _DT_VERIFY_TRIGGERS)
     reasoning_hit = any(t in lower_msg for t in _DT_REASONING_TRIGGERS)
-    return heavy_context or list_hit or verify_hit or reasoning_hit
+    return list_hit or verify_hit or reasoning_hit
 
 
 async def gather_deep_think_responses(messages: list[dict]) -> list[dict]:
@@ -270,10 +308,12 @@ async def stream_synthesis(
     model_results: list[dict],
     task_type: str,
     original_messages: list[dict],
+    usage_out: dict | None = None,
 ):
     """
     Async generator — streams the synthesis response chunk by chunk.
     Uses DeepSeek V3.2 as synthesizer.
+    If usage_out dict is provided, it will be populated with synthesis token usage.
     """
     perspectives = "\n\n".join(
         f"[Perspective {i + 1} — {r['display_name']}]:\n{r['content']}"
@@ -304,6 +344,7 @@ async def stream_synthesis(
         "messages": synthesis_messages,
         "max_tokens": 2048,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
@@ -321,6 +362,8 @@ async def stream_synthesis(
                     break
                 try:
                     parsed = json.loads(data)
+                    if usage_out is not None and parsed.get("usage"):
+                        usage_out.update(parsed["usage"])
                     chunk = parsed["choices"][0]["delta"].get("content", "")
                     if chunk:
                         yield chunk

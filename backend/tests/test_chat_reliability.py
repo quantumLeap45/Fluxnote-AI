@@ -5,7 +5,12 @@ Covers the empty-message guard added in the foundation stabilization sprint:
 - When stream produces no content, the error SSE event is yielded
 - When stream produces no content, no assistant message is inserted in DB
 - When stream produces content, the done event is yielded (success path)
+
+Task 8 (reliability sprint):
+- Synthesis timeout: when stream_synthesis hangs beyond SYNTHESIS_TIMEOUT_S,
+  an error SSE event is emitted and the done event is suppressed
 """
+import asyncio
 import json
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
@@ -145,3 +150,79 @@ async def test_content_stream_emits_done_not_error():
     event_types = [e.get("type") for e in events]
     assert "done" in event_types, f"Expected done event on successful stream, got: {event_types}"
     assert "error" not in event_types, f"Expected no error event on successful stream, got: {event_types}"
+
+
+# ── Task 8: Synthesis timeout emits error, not done ───────────────────────────
+
+@pytest.mark.anyio
+async def test_synthesis_timeout_emits_error_not_done():
+    """
+    When stream_synthesis hangs beyond SYNTHESIS_TIMEOUT_S, the event_stream must:
+    - Emit an error SSE event (not done)
+    - NOT insert an assistant message to the DB
+
+    We patch SYNTHESIS_TIMEOUT_S to 0.05s (50ms) and use a hanging synthesis
+    generator that sleeps indefinitely, so the timeout fires immediately.
+    """
+    import app.api.chat as chat_module
+
+    original_timeout = chat_module.SYNTHESIS_TIMEOUT_S
+    chat_module.SYNTHESIS_TIMEOUT_S = 0.05  # 50ms — forces timeout in test
+
+    async def hanging_synthesis(*args, **kwargs):
+        await asyncio.sleep(10)  # will never complete within 50ms
+        yield "too late"  # never reached
+
+    async def fast_classify(msg: str) -> str:
+        return "general"
+
+    async def fast_gather(*args, **kwargs):
+        return [
+            {"model_id": "test-model", "display_name": "Test",
+             "content": "proposer response", "tokens": 20},
+        ]
+
+    inserted = []
+
+    class FakeQuery:
+        def __init__(self, *a, **kw): pass
+        def select(self, *a, **kw): return self
+        def insert(self, data): inserted.append(data); return self
+        def update(self, *a, **kw): return self
+        def delete(self): return self
+        def eq(self, *a, **kw): return self
+        def order(self, *a, **kw): return self
+        def limit(self, *a, **kw): return self
+        def in_(self, *a, **kw): return self
+        async def execute(self): return MagicMock(data=[], count=0)
+
+    try:
+        with patch("app.api.chat.classify_task", new=fast_classify):
+            with patch("app.api.chat.gather_model_responses", new=fast_gather):
+                with patch("app.api.chat.stream_synthesis", new=hanging_synthesis):
+                    with patch("app.services.db.DBQuery", FakeQuery):
+                        from app.models.chat import ChatRequest, ModelTier
+                        from app.api.chat import post_message
+
+                        request = ChatRequest(
+                            message="analyze this topic thoroughly",
+                            model=ModelTier.ROUTED,
+                            session_id="test-timeout-routed",
+                            workspace_id="test-timeout-ws",
+                        )
+                        response = await post_message(request)
+                        events = await _collect_sse_events(response.body_iterator)
+    finally:
+        chat_module.SYNTHESIS_TIMEOUT_S = original_timeout
+
+    event_types = [e.get("type") for e in events]
+    assert "error" in event_types, (
+        f"Expected error event on synthesis timeout, got: {event_types}"
+    )
+    assert "done" not in event_types, (
+        f"Expected no done event on synthesis timeout, got: {event_types}"
+    )
+    assistant_inserts = [d for d in inserted if d.get("role") == "assistant"]
+    assert not assistant_inserts, (
+        f"Timed-out synthesis must not insert an assistant message: {assistant_inserts}"
+    )

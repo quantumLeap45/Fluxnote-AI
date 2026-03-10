@@ -1,10 +1,14 @@
 import json
+import logging
+import time
 from typing import AsyncGenerator, Union
 
 import httpx
 
 from app.config import settings
 from app.models.chat import ModelTier
+
+logger = logging.getLogger("app.ai_router")
 
 # Maps ModelTier enum values to real OpenRouter model IDs
 MODEL_ID_MAP: dict[ModelTier, str] = {
@@ -43,6 +47,12 @@ async def stream_chat_response(
         "max_tokens": 2048,
     }
 
+    start_time: float = time.time()
+    first_chunk_time: float | None = None
+    chunk_count: int = 0
+    skipped_frames: int = 0
+    completion_outcome: str = "no_content"
+
     async with httpx.AsyncClient(timeout=90) as client:
         async with client.stream(
             "POST",
@@ -68,10 +78,26 @@ async def stream_chat_response(
                         usage_out.update(parsed["usage"])
                     chunk = parsed["choices"][0]["delta"].get("content") or ""
                     if chunk:
+                        if first_chunk_time is None:
+                            first_chunk_time = time.time()
+                        chunk_count += 1
+                        completion_outcome = "success"
                         yield chunk
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    # Malformed or incomplete SSE frame — skip gracefully
+                except (json.JSONDecodeError, KeyError, IndexError) as exc:
+                    skipped_frames += 1
+                    logger.debug(
+                        "ai_router: malformed SSE frame skipped (%s): %.80r",
+                        type(exc).__name__, data,
+                    )
                     continue
+
+    total_ms = int((time.time() - start_time) * 1000)
+    ttft_ms = int((first_chunk_time - start_time) * 1000) if first_chunk_time else None
+    logger.info(
+        "ai_router: stream complete | outcome=%s chunk_count=%d ttft_ms=%s "
+        "total_ms=%d skipped_frames=%d model=%s",
+        completion_outcome, chunk_count, ttft_ms, total_ms, skipped_frames, model_id,
+    )
 
 
 async def stream_chat_response_with_thinking(
@@ -85,7 +111,6 @@ async def stream_chat_response_with_thinking(
       {"type": "thinking", "text": "..."}  — reasoning/thinking token chunk
       {"type": "content",  "text": "..."}  — final answer token chunk
 
-    Uses Claude Haiku 4.5 with reasoning enabled (budget: 2000 tokens).
     Falls back gracefully: if the API returns no reasoning_details, the
     generator still yields content chunks as normal.
     """
@@ -132,7 +157,7 @@ async def stream_chat_response_with_thinking(
                     delta = parsed["choices"][0]["delta"]
 
                     # ── Reasoning / thinking tokens ─────────────────────────
-                    # OpenRouter exposes Claude extended thinking in
+                    # OpenRouter exposes extended thinking in
                     # delta.reasoning_details (array) or delta.reasoning (str).
                     raw_reasoning = (
                         delta.get("reasoning_details")

@@ -131,6 +131,7 @@ function App() {
                         onFirstMessage={handleFirstMessage}
                         historyCache={historyCacheRef.current}
                         assignments={assignments}
+                        onCardCreated={handleCardCreated}
                     />
                 )}
                 {activeTab === 'dashboard' && (

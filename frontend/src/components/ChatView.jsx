@@ -44,7 +44,7 @@ function buildAssignmentsManifest(assignments) {
 }
 
 
-function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache, assignments }) {
+function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache, assignments, onCardCreated }) {
     const [selectedModel, setSelectedModel] = useState('Fast');
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [inputText, setInputText] = useState('');
@@ -204,10 +204,13 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
             try {
                 let result;
                 if (SUPABASE_CONFIGURED) {
+                    // Storage bucket path uses sessionId as a key only (not queried by DB).
+                    // DB row is scoped to workspaceId so + Dashboard (createAssignment) can
+                    // look up the file using the same workspaceId as assignments.
                     const { path } = await uploadToStorage(file, sessionId);
-                    result = await processStorageFile(path, file.name, sessionId);
+                    result = await processStorageFile(path, file.name, workspaceId);
                 } else {
-                    result = await uploadFile(file, sessionId);
+                    result = await uploadFile(file, workspaceId);
                 }
                 setFiles(prev => [...prev, { ...result, addedToDashboard: false }]);
                 uploadedCount++;
@@ -222,15 +225,16 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
 
     const removeFile = async (id) => {
         try {
-            await deleteFile(id, sessionId);
+            await deleteFile(id, workspaceId);
         } catch { /* silent — remove from UI regardless */ }
         setFiles(prev => prev.filter(f => f.id !== id));
     };
 
     const handleAddToDashboard = async (fileId) => {
         try {
-            await createAssignment(fileId, workspaceId);
+            const card = await createAssignment(fileId, workspaceId);
             setFiles(prev => prev.map(f => f.id === fileId ? { ...f, addedToDashboard: true } : f));
+            onCardCreated?.(card);
         } catch (err) {
             setError(`Could not create assignment card: ${err.message}`);
         }
@@ -328,16 +332,20 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                                                     remarkPlugins={[remarkMath, remarkGfm]}
                                                     rehypePlugins={[rehypeKatex]}
                                                   >{msg.content}</ReactMarkdown>
-                                                : null
+                                                : !streaming
+                                                    ? <span className="no-response-error">No response received — please try again.</span>
+                                                    : null
                                     ) : msg.content}
                                 </div>
                                 {msg.attribution && (
                                     <div className="attribution-footer">
-                                        {msg.attribution.simple
-                                            ? <>⚡ Routed — fast response</>
-                                            : msg.attribution.models_used
-                                                ? <>⚡ Synthesised from {msg.attribution.models_used.join(' · ')}</>
-                                                : null}
+                                        {msg.attribution.deep_think_escalated && msg.attribution.models_used
+                                            ? <>🧠 Deep analysis — synthesised from {msg.attribution.models_used.join(' · ')}</>
+                                            : msg.attribution.simple
+                                                ? <>⚡ Routed — fast response</>
+                                                : msg.attribution.models_used
+                                                    ? <>⚡ Synthesised from {msg.attribution.models_used.join(' · ')}</>
+                                                    : null}
                                         {msg.attribution.total_tokens > 0 && (
                                             <span className="token-count"> · {msg.attribution.total_tokens.toLocaleString()} tokens</span>
                                         )}
