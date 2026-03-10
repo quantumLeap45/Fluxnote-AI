@@ -44,7 +44,7 @@ function buildAssignmentsManifest(assignments) {
 }
 
 
-function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache, assignments }) {
+function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache, assignments, onCardCreated }) {
     const [selectedModel, setSelectedModel] = useState('Fast');
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [inputText, setInputText] = useState('');
@@ -232,8 +232,9 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
 
     const handleAddToDashboard = async (fileId) => {
         try {
-            await createAssignment(fileId, workspaceId);
+            const card = await createAssignment(fileId, workspaceId);
             setFiles(prev => prev.map(f => f.id === fileId ? { ...f, addedToDashboard: true } : f));
+            onCardCreated?.(card);
         } catch (err) {
             setError(`Could not create assignment card: ${err.message}`);
         }
