@@ -20,12 +20,6 @@ const SUPABASE_CONFIGURED = !!(
 );
 import './ChatView.css';
 
-const MODEL_MAP = {
-    'Fast':       'Fast',
-    'Balanced':   'Balanced',
-    'Deep Think': 'Deep Think',
-};
-
 const WELCOME_MSG = { id: 1, role: 'ai', content: "Hi! I'm Fluxnote — ask me anything: assignments, study help, writing, or general topics. I can see your dashboard, so just ask about your assignments anytime!", model: 'Fast' };
 
 function buildAssignmentsManifest(assignments) {

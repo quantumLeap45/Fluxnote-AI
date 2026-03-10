@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 from datetime import datetime, timezone
 
@@ -68,9 +69,8 @@ async def create_assignment(body: AssignmentCreate):
         extracted = await extract_assignment_data(combined_content)
 
         # due_date must be a valid ISO date or None — never pass descriptive strings to the DB
-        import re as _re
         raw_due = extracted.get("due_date")
-        safe_due_date = raw_due if raw_due and _re.match(r'^\d{4}-\d{2}-\d{2}$', str(raw_due)) else None
+        safe_due_date = raw_due if raw_due and re.match(r'^\d{4}-\d{2}-\d{2}$', str(raw_due)) else None
 
         await (
             db.table("assignments")
@@ -250,9 +250,8 @@ async def re_extract_assignment(assignment_id: str, session_id: str = Query(...)
     try:
         extracted = await extract_assignment_data(combined_content)
 
-        import re as _re
         raw_due = extracted.get("due_date")
-        safe_due_date = raw_due if raw_due and _re.match(r'^\d{4}-\d{2}-\d{2}$', str(raw_due)) else None
+        safe_due_date = raw_due if raw_due and re.match(r'^\d{4}-\d{2}-\d{2}$', str(raw_due)) else None
 
         await (
             db.table("assignments")
