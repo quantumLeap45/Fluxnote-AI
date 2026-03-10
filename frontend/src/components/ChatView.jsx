@@ -204,10 +204,13 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
             try {
                 let result;
                 if (SUPABASE_CONFIGURED) {
+                    // Storage bucket path uses sessionId as a key only (not queried by DB).
+                    // DB row is scoped to workspaceId so + Dashboard (createAssignment) can
+                    // look up the file using the same workspaceId as assignments.
                     const { path } = await uploadToStorage(file, sessionId);
-                    result = await processStorageFile(path, file.name, sessionId);
+                    result = await processStorageFile(path, file.name, workspaceId);
                 } else {
-                    result = await uploadFile(file, sessionId);
+                    result = await uploadFile(file, workspaceId);
                 }
                 setFiles(prev => [...prev, { ...result, addedToDashboard: false }]);
                 uploadedCount++;
@@ -222,7 +225,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
 
     const removeFile = async (id) => {
         try {
-            await deleteFile(id, sessionId);
+            await deleteFile(id, workspaceId);
         } catch { /* silent — remove from UI regardless */ }
         setFiles(prev => prev.filter(f => f.id !== id));
     };
