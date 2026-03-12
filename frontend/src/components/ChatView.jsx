@@ -19,6 +19,7 @@ const SUPABASE_CONFIGURED = !!(
     import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 import './ChatView.css';
+import HintBanner from './HintBanner';
 
 const WELCOME_MSG = { id: 1, role: 'ai', content: "Hi! I'm Fluxnote — ask me anything: assignments, study help, writing, or general topics. I can see your dashboard, so just ask about your assignments anytime!", model: 'Fast' };
 
@@ -247,7 +248,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
         <div className="chat-container animate-fade-in">
             {/* Header Area */}
             <header className="chat-header">
-                <div className="model-selector">
+                <div className="model-selector" data-tour="model-selector">
                     <button
                         className="model-select-btn"
                         onClick={() => setShowModelDropdown(!showModelDropdown)}
@@ -399,8 +400,12 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                     </div>
                 )}
 
-                <div className="prompt-composer">
-                    <label className="attach-btn" title="Attach file">
+                <HintBanner
+                    message="Start here — type a question or attach a file using the paperclip icon."
+                    storageKey="fluxnote_hint_chat"
+                />
+                <div className="prompt-composer" data-tour="chat-input">
+                    <label className="attach-btn" title="Attach file" data-tour="file-upload">
                         <Paperclip size={18} />
                         <input
                             type="file"

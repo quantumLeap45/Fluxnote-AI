@@ -1,0 +1,150 @@
+.landing-root {
+    min-height: 100vh;
+    overflow-y: auto;
+    background-color: var(--bg-app);
+    font-family: var(--font-sans);
+    color: var(--text-primary);
+}
+
+/* ── Navbar ─────────────────────────────────────────────────────────────────── */
+.landing-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 32px;
+    background-color: var(--bg-app);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.landing-logo {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.landing-nav-cta {
+    font-size: 13px;
+    padding: 6px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    background: none;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: all 0.2s ease;
+}
+
+.landing-nav-cta:hover {
+    background-color: var(--bg-input);
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────────────── */
+.landing-hero {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 80px 24px;
+    text-align: center;
+}
+
+.landing-headline {
+    font-size: 42px;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+}
+
+.landing-subheadline {
+    font-size: 17px;
+    color: var(--text-secondary);
+    margin-top: 16px;
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+}
+
+.landing-cta-primary {
+    display: inline-block;
+    margin-top: 32px;
+    background-color: var(--accent-color);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 500;
+    padding: 12px 28px;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    transition: background-color 0.2s ease;
+}
+
+.landing-cta-primary:hover {
+    background-color: var(--accent-hover);
+}
+
+/* ── Features ───────────────────────────────────────────────────────────────── */
+.landing-features {
+    display: flex;
+    gap: 24px;
+    max-width: 900px;
+    margin: 0 auto 64px;
+    padding: 0 24px;
+    flex-wrap: wrap;
+}
+
+.feature-card {
+    flex: 1;
+    min-width: 220px;
+    padding: 24px;
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.feature-icon {
+    font-size: 28px;
+    display: block;
+    margin-bottom: 12px;
+}
+
+.feature-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.feature-card p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+    line-height: 1.5;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────────── */
+.landing-footer {
+    text-align: center;
+    padding: 32px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border-color);
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .landing-headline {
+        font-size: 28px;
+    }
+
+    .landing-features {
+        flex-direction: column;
+    }
+
+    .landing-nav {
+        padding: 14px 20px;
+    }
+}

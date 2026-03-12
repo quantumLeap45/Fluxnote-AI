@@ -1,0 +1,39 @@
+.hint-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: rgba(0, 122, 255, 0.08);
+    border: 1px solid rgba(0, 122, 255, 0.2);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.hint-icon {
+    color: var(--accent-color);
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.hint-message {
+    flex: 1;
+}
+
+.hint-dismiss {
+    font-size: 11px;
+    color: var(--text-secondary);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease;
+}
+
+.hint-dismiss:hover {
+    background-color: var(--bg-input);
+}

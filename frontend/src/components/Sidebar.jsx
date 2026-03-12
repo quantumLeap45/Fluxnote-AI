@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
-import { MessageSquare, LayoutDashboard, Plus, Trash2, Pencil, Check } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { MessageSquare, LayoutDashboard, Plus, Trash2, Pencil, Check, HelpCircle, Sun, Moon } from 'lucide-react';
 import './Sidebar.css';
 
-function Sidebar({ activeTab, setActiveTab, chats, activeChatId, onNewChat, onSelectChat, onDeleteChat, onRenameChat }) {
+function Sidebar({
+    activeTab, setActiveTab, chats, activeChatId,
+    onNewChat, onSelectChat, onDeleteChat, onRenameChat,
+    onReplayOnboarding, theme, onThemeToggle,
+}) {
     const [renamingId, setRenamingId] = useState(null);
     const [renameValue, setRenameValue] = useState('');
+    const themeToggleRef = useRef(null);
 
     const startRename = (e, chat) => {
         e.stopPropagation();
@@ -20,6 +25,10 @@ function Sidebar({ activeTab, setActiveTab, chats, activeChatId, onNewChat, onSe
     const handleRenameKeyDown = (e, id) => {
         if (e.key === 'Enter') { e.preventDefault(); commitRename(id); }
         if (e.key === 'Escape') setRenamingId(null);
+    };
+
+    const handleThemeClick = () => {
+        onThemeToggle(themeToggleRef.current);
     };
 
     return (
@@ -41,11 +50,18 @@ function Sidebar({ activeTab, setActiveTab, chats, activeChatId, onNewChat, onSe
                     <span>Chat</span>
                 </button>
                 <button
+                    data-tour="dashboard-tab"
                     className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('dashboard')}
+                    onClick={() => {
+                        setActiveTab('dashboard');
+                        localStorage.setItem('fluxnote_hint_dashboard', '1');
+                    }}
                 >
                     <LayoutDashboard size={18} />
                     <span>Dashboard</span>
+                    {!localStorage.getItem('fluxnote_hint_dashboard') && (
+                        <span className="nav-hint-dot" />
+                    )}
                 </button>
             </nav>
 
@@ -103,6 +119,26 @@ function Sidebar({ activeTab, setActiveTab, chats, activeChatId, onNewChat, onSe
                         ))}
                     </ul>
                 )}
+            </div>
+
+            <div className="sidebar-bottom">
+                <button
+                    ref={themeToggleRef}
+                    className="sidebar-theme-btn"
+                    onClick={handleThemeClick}
+                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                    {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+                    <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+                </button>
+                <button
+                    className="sidebar-help-btn"
+                    onClick={onReplayOnboarding}
+                    title="Show onboarding guide"
+                >
+                    <HelpCircle size={15} />
+                    <span>Help</span>
+                </button>
             </div>
         </aside>
     );
