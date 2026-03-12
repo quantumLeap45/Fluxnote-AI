@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { MessageSquare, LayoutDashboard, Plus, Trash2, Pencil, Check } from 'lucide-react';
+import { MessageSquare, LayoutDashboard, Plus, Trash2, Pencil, Check, HelpCircle } from 'lucide-react';
 import './Sidebar.css';
 
-function Sidebar({ activeTab, setActiveTab, chats, activeChatId, onNewChat, onSelectChat, onDeleteChat, onRenameChat }) {
+function Sidebar({ activeTab, setActiveTab, chats, activeChatId, onNewChat, onSelectChat, onDeleteChat, onRenameChat, onReplayOnboarding }) {
     const [renamingId, setRenamingId] = useState(null);
     const [renameValue, setRenameValue] = useState('');
 
@@ -42,10 +42,16 @@ function Sidebar({ activeTab, setActiveTab, chats, activeChatId, onNewChat, onSe
                 </button>
                 <button
                     className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('dashboard')}
+                    onClick={() => {
+                        setActiveTab('dashboard');
+                        localStorage.setItem('fluxnote_hint_dashboard', '1');
+                    }}
                 >
                     <LayoutDashboard size={18} />
                     <span>Dashboard</span>
+                    {!localStorage.getItem('fluxnote_hint_dashboard') && (
+                        <span className="nav-hint-dot" />
+                    )}
                 </button>
             </nav>
 
@@ -103,6 +109,12 @@ function Sidebar({ activeTab, setActiveTab, chats, activeChatId, onNewChat, onSe
                         ))}
                     </ul>
                 )}
+            </div>
+            <div className="sidebar-bottom">
+                <button className="sidebar-help-btn" onClick={onReplayOnboarding} title="Show onboarding guide">
+                    <HelpCircle size={15} />
+                    <span>Help</span>
+                </button>
             </div>
         </aside>
     );
