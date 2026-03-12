@@ -77,9 +77,15 @@ function App() {
     }, [theme]);
 
     // ── Onboarding ────────────────────────────────────────────────────────────
-    const [showOnboarding, setShowOnboarding] = useState(
-        () => !localStorage.getItem('fluxnote_onboarded')
-    );
+    // Mark as seen immediately on first load so closing the browser mid-tour
+    // doesn't cause it to repeat on every subsequent visit.
+    const [showOnboarding, setShowOnboarding] = useState(() => {
+        if (!localStorage.getItem('fluxnote_onboarded')) {
+            localStorage.setItem('fluxnote_onboarded', '1');
+            return true;
+        }
+        return false;
+    });
 
     const handleOnboardingComplete = useCallback(() => {
         localStorage.setItem('fluxnote_onboarded', '1');
