@@ -1,0 +1,117 @@
+.onboarding-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.onboarding-modal {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    max-width: 480px;
+    width: 90%;
+    box-shadow: var(--shadow-lg);
+}
+
+.onboarding-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.onboarding-step {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.onboarding-skip {
+    font-size: 13px;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-family: inherit;
+    transition: color 0.15s ease;
+}
+
+.onboarding-skip:hover {
+    color: var(--text-primary);
+}
+
+.onboarding-title {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 16px 0 12px;
+    color: var(--text-primary);
+}
+
+.onboarding-body {
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.onboarding-panels {
+    display: flex;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.onboarding-panel {
+    flex: 1;
+    padding: 16px;
+    background: var(--bg-input);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.onboarding-panel strong {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.onboarding-panel p {
+    margin-top: 4px;
+}
+
+.onboarding-panel-icon {
+    font-size: 24px;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.onboarding-footer {
+    margin-top: 24px;
+    text-align: right;
+}
+
+.onboarding-cta {
+    background: var(--accent-color);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color 0.2s ease;
+}
+
+.onboarding-cta:hover {
+    background: var(--accent-hover);
+}
