@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/ChatView';
 import DashboardView from './components/DashboardView';
+import OnboardingModal from './components/OnboardingModal';
 import {
     getSessionId,
     getWorkspaceId,
@@ -25,6 +26,22 @@ function App() {
     const [assignments, setAssignments]       = useState([]);
     const [assignmentFetchError, setAssignmentFetchError] = useState(false);
     const historyCacheRef                     = useRef(new Map());
+
+    const [showOnboarding, setShowOnboarding] = useState(
+        () => !localStorage.getItem('fluxnote_onboarded')
+    );
+
+    const handleOnboardingComplete = useCallback(() => {
+        localStorage.setItem('fluxnote_onboarded', '1');
+        setShowOnboarding(false);
+    }, []);
+
+    const handleReplayOnboarding = useCallback(() => {
+        localStorage.removeItem('fluxnote_onboarded');
+        localStorage.removeItem('fluxnote_hint_chat');
+        localStorage.removeItem('fluxnote_hint_dashboard');
+        setShowOnboarding(true);
+    }, []);
 
     const refreshChats = useCallback(() => setChats(getStoredChats()), []);
 
@@ -119,6 +136,7 @@ function App() {
                 onSelectChat={handleSelectChat}
                 onDeleteChat={handleDeleteChat}
                 onRenameChat={handleRenameChat}
+                onReplayOnboarding={handleReplayOnboarding}
             />
             <main className="main-content">
                 {activeTab === 'chat' && (
@@ -153,6 +171,7 @@ function App() {
                 )}
             </main>
         </div>
+        {showOnboarding && <OnboardingModal onComplete={handleOnboardingComplete} />}
     );
 }
 
