@@ -300,7 +300,8 @@ _SYNTHESIS_SYSTEM = (
     "- Give the final best unified answer directly — do NOT mention the individual models\n"
     "- Do NOT say 'based on the perspectives above' or similar meta-commentary\n"
     "- Preserve the best insights, examples, and structure from all inputs\n"
-    "- Be concise and clear"
+    "- Be concise and clear\n"
+    "- For ALL math/equations: use ONLY inline $...$ or block $$...$$ LaTeX — never \\[...\\] or \\(...\\)"
 )
 
 
