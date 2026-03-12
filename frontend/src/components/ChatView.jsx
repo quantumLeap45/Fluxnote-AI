@@ -43,6 +43,15 @@ function buildAssignmentsManifest(assignments) {
     return `[STUDENT DASHBOARD — ${assignments.length} assignment${assignments.length !== 1 ? 's' : ''}]\n${lines.join('\n')}`;
 }
 
+/** Normalize AI LaTeX output to the $...$ / $$...$$ form that remark-math expects. */
+function normalizeLatex(text) {
+    if (!text) return text;
+    // \[...\]  →  $$...$$
+    let out = text.replace(/\\\[([\s\S]*?)\\\]/g, (_m, inner) => `$$${inner}$$`);
+    // \(...\)  →  $...$
+    out = out.replace(/\\\(([\s\S]*?)\\\)/g, (_m, inner) => `$${inner}$`);
+    return out;
+}
 
 function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, onFirstMessage, historyCache, assignments, onCardCreated }) {
     const [selectedModel, setSelectedModel] = useState('Fast');
@@ -331,7 +340,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                                                 ? <ReactMarkdown
                                                     remarkPlugins={[remarkMath, remarkGfm]}
                                                     rehypePlugins={[rehypeKatex]}
-                                                  >{msg.content}</ReactMarkdown>
+                                                  >{normalizeLatex(msg.content)}</ReactMarkdown>
                                                 : !streaming
                                                     ? <span className="no-response-error">No response received — please try again.</span>
                                                     : null

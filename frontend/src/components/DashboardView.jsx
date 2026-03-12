@@ -3,8 +3,18 @@ import KanbanBoard from './KanbanBoard';
 import AssignmentDetail from './AssignmentDetail';
 import './DashboardView.css';
 
+const BANNER_KEY = 'fluxnote_storage_banner_dismissed';
+
 function DashboardView({ workspaceId, assignments, fetchError, onRetryFetch, onAskAI, onAssignmentUpdate, onDeleteCard, onCardCreated }) {
     const [selectedCard, setSelectedCard] = useState(null);
+    const [bannerDismissed, setBannerDismissed] = useState(
+        () => !!localStorage.getItem(BANNER_KEY)
+    );
+
+    const dismissBanner = () => {
+        localStorage.setItem(BANNER_KEY, '1');
+        setBannerDismissed(true);
+    };
 
     const handleDeleteCard = async (cardId) => {
         await onDeleteCard(cardId);
@@ -19,6 +29,19 @@ function DashboardView({ workspaceId, assignments, fetchError, onRetryFetch, onA
                     <p className="dashboard-subtitle">Drag cards across columns to track your progress.</p>
                 </div>
             </header>
+
+            {!bannerDismissed && (
+                <div style={{ padding: '10px 16px', marginBottom: '12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
+                    <span>Your dashboard is saved in this browser — not synced across devices. Opening Fluxnote on a different browser or device will show an empty dashboard.</span>
+                    <button
+                        aria-label="Got it"
+                        onClick={dismissBanner}
+                        style={{ marginLeft: 'auto', padding: '3px 10px', background: 'transparent', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', whiteSpace: 'nowrap' }}
+                    >
+                        Got it
+                    </button>
+                </div>
+            )}
 
             {fetchError && (
                 <div style={{ padding: '12px 16px', marginBottom: '12px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '10px' }}>

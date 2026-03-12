@@ -92,7 +92,7 @@ function Sidebar({ activeTab, setActiveTab, chats, activeChatId, onNewChat, onSe
                                         </button>
                                         <button
                                             className="chat-history-delete"
-                                            onClick={e => { e.stopPropagation(); onDeleteChat(chat.id); }}
+                                            onClick={e => { e.stopPropagation(); if (window.confirm('Delete this chat?')) onDeleteChat(chat.id); }}
                                             title="Delete chat"
                                         >
                                             <Trash2 size={13} />

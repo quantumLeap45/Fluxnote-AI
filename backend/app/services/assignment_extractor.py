@@ -44,7 +44,7 @@ async def _call_openrouter(text: str) -> dict:
             {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
             {"role": "user",   "content": f"Extract structured data from this assignment:\n\n{text[:8000]}"},
         ],
-        "max_tokens": 1024,
+        "max_tokens": 2048,
         "stream": False,
     }
     async with httpx.AsyncClient(timeout=42) as client:
