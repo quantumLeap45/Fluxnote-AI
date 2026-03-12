@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/ChatView';
 import DashboardView from './components/DashboardView';
-import OnboardingModal from './components/OnboardingModal';
+import OnboardingTour from './components/OnboardingTour';
 import {
     getSessionId,
     getWorkspaceId,
@@ -17,6 +17,14 @@ import {
     clearChatHistory,
 } from './api';
 
+const THEME_KEY = 'fluxnote_theme';
+
+function getEffectiveTheme() {
+    const stored = localStorage.getItem(THEME_KEY);
+    if (stored) return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 function App() {
     const [activeChatId, setActiveChatId]     = useState(() => getSessionId());
     const [workspaceId]                       = useState(() => getWorkspaceId());
@@ -27,12 +35,57 @@ function App() {
     const [assignmentFetchError, setAssignmentFetchError] = useState(false);
     const historyCacheRef                     = useRef(new Map());
 
+    // ── Theme ─────────────────────────────────────────────────────────────────
+    const [theme, setTheme] = useState(getEffectiveTheme);
+
+    // Apply stored preference to DOM on first mount
+    useEffect(() => {
+        const stored = localStorage.getItem(THEME_KEY);
+        if (stored) document.documentElement.setAttribute('data-theme', stored);
+    }, []);
+
+    const handleThemeToggle = useCallback((buttonEl) => {
+        const newTheme = theme === 'dark' ? 'light' : 'dark';
+
+        const applySwitch = () => {
+            localStorage.setItem(THEME_KEY, newTheme);
+            document.documentElement.setAttribute('data-theme', newTheme);
+            setTheme(newTheme);
+        };
+
+        // View Transitions ripple — graceful fallback for older browsers
+        if (!document.startViewTransition || !buttonEl) {
+            applySwitch();
+            return;
+        }
+
+        const rect = buttonEl.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const endRadius = Math.hypot(
+            Math.max(x, window.innerWidth - x),
+            Math.max(y, window.innerHeight - y),
+        );
+
+        const transition = document.startViewTransition(applySwitch);
+        transition.ready.then(() => {
+            document.documentElement.animate(
+                { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${endRadius}px at ${x}px ${y}px)`] },
+                { duration: 500, easing: 'ease-in-out', pseudoElement: '::view-transition-new(root)' },
+            );
+        });
+    }, [theme]);
+
+    // ── Onboarding ────────────────────────────────────────────────────────────
     const [showOnboarding, setShowOnboarding] = useState(
         () => !localStorage.getItem('fluxnote_onboarded')
     );
 
     const handleOnboardingComplete = useCallback(() => {
         localStorage.setItem('fluxnote_onboarded', '1');
+        // Suppress hint banners — tour already covered those areas
+        localStorage.setItem('fluxnote_hint_chat', '1');
+        localStorage.setItem('fluxnote_hint_dashboard', '1');
         setShowOnboarding(false);
     }, []);
 
@@ -43,9 +96,9 @@ function App() {
         setShowOnboarding(true);
     }, []);
 
+    // ── Chats & assignments ───────────────────────────────────────────────────
     const refreshChats = useCallback(() => setChats(getStoredChats()), []);
 
-    // Fetch assignments once — persists across tab switches
     useEffect(() => {
         listAssignments(workspaceId)
             .then(data => {
@@ -81,7 +134,6 @@ function App() {
                 handleNewChat();
             }
         }
-        // Best-effort: delete backend messages. UI already updated; show notice on failure.
         clearChatHistory(id).catch(() => {
             alert('Chat removed locally. Could not clear server history — some messages may remain.');
         });
@@ -97,7 +149,6 @@ function App() {
         refreshChats();
     }, [refreshChats]);
 
-    // Assignment handlers (moved from DashboardView)
     const handleAssignmentUpdate = useCallback((updated) => {
         setAssignments(prev => prev.map(a => a.id === updated.id ? updated : a));
     }, []);
@@ -115,7 +166,6 @@ function App() {
         setAssignments(prev => [card, ...prev]);
     }, []);
 
-    // "Ask AI" — creates a fresh chat session, injects assignment context
     const openChatWithContext = useCallback((assignment) => {
         const newId = createNewChatSession();
         storeChatTitle(newId, `Ask AI: ${(assignment.title || assignment.filename).slice(0, 50)}`);
@@ -127,52 +177,60 @@ function App() {
 
     return (
         <>
-        <div className="app-container">
-            <Sidebar
-                activeTab={activeTab}
+            <div className="app-container">
+                <Sidebar
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    chats={chats}
+                    activeChatId={activeChatId}
+                    onNewChat={handleNewChat}
+                    onSelectChat={handleSelectChat}
+                    onDeleteChat={handleDeleteChat}
+                    onRenameChat={handleRenameChat}
+                    onReplayOnboarding={handleReplayOnboarding}
+                    theme={theme}
+                    onThemeToggle={handleThemeToggle}
+                />
+                <main className="main-content">
+                    {activeTab === 'chat' && (
+                        <ChatView
+                            key={activeChatId}
+                            sessionId={activeChatId}
+                            workspaceId={workspaceId}
+                            initialContext={chatContext}
+                            onContextConsumed={() => setChatContext(null)}
+                            onFirstMessage={handleFirstMessage}
+                            historyCache={historyCacheRef.current}
+                            assignments={assignments}
+                            onCardCreated={handleCardCreated}
+                        />
+                    )}
+                    {activeTab === 'dashboard' && (
+                        <DashboardView
+                            workspaceId={workspaceId}
+                            assignments={assignments}
+                            fetchError={assignmentFetchError}
+                            onRetryFetch={() => {
+                                setAssignmentFetchError(false);
+                                listAssignments(workspaceId)
+                                    .then(data => setAssignments(data.assignments || []))
+                                    .catch(() => setAssignmentFetchError(true));
+                            }}
+                            onAskAI={openChatWithContext}
+                            onAssignmentUpdate={handleAssignmentUpdate}
+                            onDeleteCard={handleDeleteCard}
+                            onCardCreated={handleCardCreated}
+                        />
+                    )}
+                </main>
+            </div>
+
+            <OnboardingTour
+                run={showOnboarding}
+                theme={theme}
+                onComplete={handleOnboardingComplete}
                 setActiveTab={setActiveTab}
-                chats={chats}
-                activeChatId={activeChatId}
-                onNewChat={handleNewChat}
-                onSelectChat={handleSelectChat}
-                onDeleteChat={handleDeleteChat}
-                onRenameChat={handleRenameChat}
-                onReplayOnboarding={handleReplayOnboarding}
             />
-            <main className="main-content">
-                {activeTab === 'chat' && (
-                    <ChatView
-                        key={activeChatId}
-                        sessionId={activeChatId}
-                        workspaceId={workspaceId}
-                        initialContext={chatContext}
-                        onContextConsumed={() => setChatContext(null)}
-                        onFirstMessage={handleFirstMessage}
-                        historyCache={historyCacheRef.current}
-                        assignments={assignments}
-                        onCardCreated={handleCardCreated}
-                    />
-                )}
-                {activeTab === 'dashboard' && (
-                    <DashboardView
-                        workspaceId={workspaceId}
-                        assignments={assignments}
-                        fetchError={assignmentFetchError}
-                        onRetryFetch={() => {
-                            setAssignmentFetchError(false);
-                            listAssignments(workspaceId)
-                                .then(data => setAssignments(data.assignments || []))
-                                .catch(() => setAssignmentFetchError(true));
-                        }}
-                        onAskAI={openChatWithContext}
-                        onAssignmentUpdate={handleAssignmentUpdate}
-                        onDeleteCard={handleDeleteCard}
-                        onCardCreated={handleCardCreated}
-                    />
-                )}
-            </main>
-        </div>
-        {showOnboarding && <OnboardingModal onComplete={handleOnboardingComplete} />}
         </>
     );
 }

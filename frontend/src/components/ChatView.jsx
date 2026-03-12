@@ -248,7 +248,7 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
         <div className="chat-container animate-fade-in">
             {/* Header Area */}
             <header className="chat-header">
-                <div className="model-selector">
+                <div className="model-selector" data-tour="model-selector">
                     <button
                         className="model-select-btn"
                         onClick={() => setShowModelDropdown(!showModelDropdown)}
@@ -404,8 +404,8 @@ function ChatView({ sessionId, workspaceId, initialContext, onContextConsumed, o
                     message="Start here — type a question or attach a file using the paperclip icon."
                     storageKey="fluxnote_hint_chat"
                 />
-                <div className="prompt-composer">
-                    <label className="attach-btn" title="Attach file">
+                <div className="prompt-composer" data-tour="chat-input">
+                    <label className="attach-btn" title="Attach file" data-tour="file-upload">
                         <Paperclip size={18} />
                         <input
                             type="file"
