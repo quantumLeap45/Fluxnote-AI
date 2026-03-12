@@ -126,6 +126,7 @@ function App() {
     }, [refreshChats]);
 
     return (
+        <>
         <div className="app-container">
             <Sidebar
                 activeTab={activeTab}
@@ -172,6 +173,7 @@ function App() {
             </main>
         </div>
         {showOnboarding && <OnboardingModal onComplete={handleOnboardingComplete} />}
+        </>
     );
 }
 
