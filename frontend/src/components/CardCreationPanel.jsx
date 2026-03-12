@@ -19,6 +19,7 @@ function CardCreationPanel({ sessionId, onCardCreated, onCancel }) {
     const [dragging, setDragging] = useState(false);
     const [creating, setCreating] = useState(false);
     const [error, setError]       = useState(null);
+    const [failed, setFailed]     = useState(false);
     const inputRef = useRef();
 
     const getExt = (name) => name.split('.').pop()?.toLowerCase() || '';
@@ -68,6 +69,7 @@ function CardCreationPanel({ sessionId, onCardCreated, onCancel }) {
             onCardCreated({ ...card, kanban_column: 'todo' });
         } catch (err) {
             setError(err.message);
+            setFailed(true);
             setCreating(false);
         }
     };
@@ -116,7 +118,12 @@ function CardCreationPanel({ sessionId, onCardCreated, onCancel }) {
                 </div>
             )}
 
-            {error && <p className="creation-error">{error}</p>}
+            {error && (
+                <p className="creation-error">
+                    {error}
+                    {failed && <> — Go to <strong>Dashboard</strong> to retry using Re-extract.</>}
+                </p>
+            )}
 
             <div className="creation-actions">
                 <button className="creation-cancel-btn" onClick={onCancel} disabled={creating}>
@@ -125,11 +132,13 @@ function CardCreationPanel({ sessionId, onCardCreated, onCancel }) {
                 <button
                     className="creation-create-btn"
                     onClick={handleCreate}
-                    disabled={!files.length || creating}
+                    disabled={!files.length || creating || failed}
                 >
                     {creating
                         ? <><Loader2 size={12} className="spin" /> Creating…</>
-                        : 'Create Card'}
+                        : failed
+                            ? 'Failed'
+                            : 'Create Card'}
                 </button>
             </div>
         </div>
