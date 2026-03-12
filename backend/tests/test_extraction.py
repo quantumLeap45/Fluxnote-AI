@@ -6,6 +6,9 @@ Covers the critical paths added in the foundation stabilization sprint:
 - Malformed JSON raises ValueError (not generic Exception)
 - HTTP 429 raises RuntimeError with clear message
 - HTTP 5xx raises RuntimeError
+
+Pre-launch reliability sprint:
+- max_tokens must be 2048 to avoid JSON truncation
 """
 import asyncio
 import json
@@ -14,6 +17,36 @@ import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.assignment_extractor import _call_openrouter, extract_assignment_data
+
+
+# ── max_tokens regression ────────────────────────────────────────────────────
+
+@pytest.mark.anyio
+async def test_extract_uses_max_tokens_2048():
+    """Extraction request must use max_tokens=2048 to avoid truncating large JSON."""
+    good_payload = {
+        "title": "T", "module": None, "due_date": "Not stated in document",
+        "weightage": None, "assignment_type": None, "deliverable_type": None,
+        "marks": None, "summary": ["s"], "checklist": ["c"], "constraints": None,
+    }
+    captured = {}
+
+    async def fake_post(self, url, *, headers, json, **kwargs):
+        captured["max_tokens"] = json.get("max_tokens")
+        mock = MagicMock()
+        mock.status_code = 200
+        mock.json.return_value = {
+            "choices": [{"message": {"content": __import__("json").dumps(good_payload)}}]
+        }
+        mock.raise_for_status = MagicMock()
+        return mock
+
+    with patch("httpx.AsyncClient.post", new=fake_post):
+        await _call_openrouter("Sample assignment text")
+
+    assert captured["max_tokens"] == 2048, (
+        f"max_tokens must be 2048 to avoid JSON truncation, got {captured['max_tokens']}"
+    )
 
 
 # ── Happy path ──────────────────────────────────────────────────────────────
